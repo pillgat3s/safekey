@@ -1,0 +1,100 @@
+name: SafeKey
+options:
+  bundleIdPrefix: com.andri
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    # Signed with a stable identity rather than ad-hoc. An ad-hoc signature has
+    # no persistent identity — every rebuild looks like a different app — so
+    # Keychain ACLs never match and macOS prompts for the login password after
+    # each update, and stored Touch ID keys stop being readable.
+    CODE_SIGN_IDENTITY: "Apple Development: thomannandri@gmail.com (R6QBGGCUGC)"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_HARDENED_RUNTIME: NO
+    DEAD_CODE_STRIPPING: YES
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  SafeKeyCore:
+    type: framework
+    platform: macOS
+    sources:
+      - Sources/SafeKeyCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.core
+  SafeKey:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/SafeKey
+    dependencies:
+      - target: SafeKeyCore
+        embed: true
+      # LAAuthenticationView — renders the Touch ID prompt inside the app's own
+      # window instead of as a floating system panel.
+      - sdk: LocalAuthenticationEmbeddedUI.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: Sources/SafeKey/Info.plist
+      properties:
+        CFBundleDisplayName: SafeKey
+        CFBundleName: SafeKey
+        LSApplicationCategoryType: public.app-category.utilities
+        NSFaceIDUsageDescription: "SafeKey uses Touch ID to unlock your vault."
+        NSSupportsSuddenTermination: false
+        LSMinimumSystemVersion: "26.0"
+        NSHumanReadableCopyright: ""
+  SafeKeyCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/SafeKeyCoreTests
+    dependencies:
+      - target: SafeKeyCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.coretests
+  SafeKeyUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - Tests/SafeKeyUITests
+    dependencies:
+      - target: SafeKey
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.uitests
+        TEST_TARGET_NAME: SafeKey
+schemes:
+  SafeKey:
+    build:
+      targets:
+        SafeKey: all
+        SafeKeyCore: all
+        SafeKeyCoreTests: [test]
+        SafeKeyUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - SafeKeyCoreTests
+  SafeKeyUI:
+    build:
+      targets:
+        SafeKey: all
+        SafeKeyUITests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - SafeKeyUITests
