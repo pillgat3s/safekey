@@ -127,8 +127,9 @@ xcodebuild -project SafeKey.xcodeproj -scheme SafeKey -destination 'platform=mac
 xcodegen generate && xcodebuild -project SafeKey.xcodeproj -scheme SafeKeyiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build build
 ```
 
-The whole iOS suite — 81 core tests plus UI tests that create a vault, add
-wallets, reveal a secret, lock, unlock, and relaunch against a scratch vault:
+The whole iOS suite — 87 core tests plus 17 UI tests covering vault creation,
+adding wallets, revealing a secret, lock/unlock, wrong password, relaunch
+persistence, search, settings, Face ID, self-destruct, and groups:
 
 ```bash
 xcodebuild -project SafeKey.xcodeproj -scheme SafeKeyiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build test
@@ -137,6 +138,18 @@ xcodebuild -project SafeKey.xcodeproj -scheme SafeKeyiOS -destination 'platform=
 UI tests run against an isolated vault (`--uitest`) in a scratch directory
 under their own Keychain service, so they can never touch a real vault. The
 hook is compiled out of release builds.
+
+Two suites are worth knowing about:
+
+- `SelfDestructUITests` arms self-destruct through the real settings UI and
+  burns the attempts, checking the vault is erased **and stays erased across a
+  relaunch** — and that a correct password resets the counter, so a near-miss
+  cannot carry over and erase the vault weeks later.
+- `BackupRoundTripiOSTests` covers the recovery path the UI tests cannot reach
+  (export and restore go through the system document picker): entries survive a
+  round trip, the exported file holds no plaintext, a rejected import leaves the
+  vault untouched, a restore keeps a rescue copy of what it replaced, and a
+  backup still opens with the password it had when it was saved.
 
 Face ID cannot authenticate itself inside the simulator — the sensor is driven
 from the host. Run the matcher alongside the biometric test:

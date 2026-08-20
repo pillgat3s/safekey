@@ -58,19 +58,22 @@ final class ScreenshotTourUITests: XCTestCase {
         capture("03-empty-vault")
 
         // 2. Add a seed phrase and a private key
+        // 24 words and a long name: the grid and the title have to cope with
+        // the largest thing a user can realistically store.
         addEntry(
-            name: "Ledger Recovery",
-            secret: "abandon ability able about above absent absorb abstract absurd abuse access accident",
+            name: "Ledger Nano X — Long Term Cold Storage",
+            secret: "abandon ability able about above absent absorb abstract absurd abuse access accident "
+                + "account accuse achieve acid acoustic acquire across act action actor actress actual",
             seedPhrase: true
         )
-        XCTAssertTrue(app.staticTexts["Ledger Recovery"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.staticTexts["Ledger Nano X — Long Term Cold Storage"].waitForExistence(timeout: timeout))
         addEntry(name: "Hot Wallet", secret: "0x4c0883a69102937d6231471b5dbb6204fe512961708279fe6f39a1c9a3f0dd4e")
         XCTAssertTrue(app.staticTexts["Hot Wallet"].waitForExistence(timeout: timeout))
         capture("04-wallet-list")
 
         // 3. Detail, masked then revealed
-        app.staticTexts["Ledger Recovery"].tap()
-        XCTAssertTrue(app.navigationBars["Ledger Recovery"].waitForExistence(timeout: timeout))
+        app.staticTexts["Ledger Nano X — Long Term Cold Storage"].tap()
+        XCTAssertTrue(app.buttons["Reveal"].waitForExistence(timeout: timeout))
         capture("05-detail-masked")
         app.buttons["Reveal"].tap()
         XCTAssertTrue(app.staticTexts["abandon"].waitForExistence(timeout: timeout))
@@ -84,6 +87,22 @@ final class ScreenshotTourUITests: XCTestCase {
         capture("07-settings-top")
         app.swipeUp()
         capture("08-settings-bottom")
+
+        app.swipeDown()
+        if app.buttons["Groups"].waitForExistence(timeout: 5) {
+            app.buttons["Groups"].tap()
+            XCTAssertTrue(app.navigationBars["Groups"].waitForExistence(timeout: timeout))
+            capture("08a-groups")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+        if app.buttons["Change Master Password"].waitForExistence(timeout: 5) {
+            app.buttons["Change Master Password"].tap()
+            XCTAssertTrue(app.navigationBars["Master Password"].waitForExistence(timeout: timeout))
+            capture("08b-change-password")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: timeout))
         app.buttons["Done"].tap()
 
         // 5. Lock screen
