@@ -1,10 +1,16 @@
 # SafeKey
 
-A local, fully encrypted macOS vault for crypto wallet secrets — seed phrases
-and private keys — styled after Apple's Passwords app on macOS 26.
+A local, fully encrypted vault for crypto wallet secrets — seed phrases and
+private keys — on **macOS 26** (styled after Apple's Passwords app) and
+**iOS 18+**.
 
-Nothing leaves the machine. No accounts, no sync, no telemetry, no network code
-in the app at all.
+Nothing leaves the device. No accounts, no sync, no telemetry, no network code
+in either app at all.
+
+Both apps compile the same `SafeKeyCore` framework, so the encryption, the
+container format, and the self-destruct accounting are one audited source
+rather than two implementations that can drift apart. A vault exported from one
+opens on the other.
 
 ## Security model
 
@@ -96,6 +102,8 @@ custom name.
 
 ## Build & run
 
+### macOS
+
 ```bash
 xcodegen generate && xcodebuild -project SafeKey.xcodeproj -scheme SafeKey -configuration Debug -derivedDataPath build build
 ```
@@ -113,7 +121,63 @@ storage, self-destruct accounting, and the device factor):
 xcodebuild -project SafeKey.xcodeproj -scheme SafeKey -destination 'platform=macOS' -derivedDataPath build test
 ```
 
-Try the UI without touching your real vault — a throwaway temp vault with
+### iOS
+
+```bash
+xcodegen generate && xcodebuild -project SafeKey.xcodeproj -scheme SafeKeyiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build build
+```
+
+The whole iOS suite — 81 core tests plus UI tests that create a vault, add
+wallets, reveal a secret, lock, unlock, and relaunch against a scratch vault:
+
+```bash
+xcodebuild -project SafeKey.xcodeproj -scheme SafeKeyiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build test
+```
+
+UI tests run against an isolated vault (`--uitest`) in a scratch directory
+under their own Keychain service, so they can never touch a real vault. The
+hook is compiled out of release builds.
+
+Face ID cannot authenticate itself inside the simulator — the sensor is driven
+from the host. Run the matcher alongside the biometric test:
+
+```bash
+scripts/simulator_faceid_match.sh <simulator-udid> 400
+```
+
+`ScreenshotTourUITests` walks every screen and writes PNGs into the test
+runner's container, for reviewing the UI without driving the simulator by hand:
+
+```bash
+xcrun simctl get_app_container <udid> com.andri.safekey.uitests.ios.xctrunner data
+```
+
+**Installing on a real iPhone.** The simulator build is signed ad-hoc, which
+a device will not run. For a device build set a signing identity and let Xcode
+manage the profile:
+
+```bash
+xcodebuild -project SafeKey.xcodeproj -scheme SafeKeyiOS \
+  -destination 'generic/platform=iOS' \
+  CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=RR9A8973M8 CODE_SIGN_IDENTITY='Apple Development' \
+  -derivedDataPath build build
+```
+
+`Sources/SafeKeyiOS/SafeKeyiOS.entitlements` already carries the matching
+team-prefixed `application-identifier`. Without that entitlement iOS refuses
+every Keychain call with `errSecMissingEntitlement`, and Face ID unlock fails
+with no visible error — so if biometrics ever stops working on device, check
+the entitlement before anything else.
+
+**What differs on iOS.** No USB security key (no port for it) and no app
+disguise (an app cannot rewrite its own bundle, and concealment sits badly with
+App Store review — alternate app icons are the sanctioned equivalent). Instead
+iOS adds a privacy cover that hides the UI from the app-switcher snapshot, and
+locks whenever the app leaves the foreground. Everything else — self-destruct,
+password change, encrypted backup and restore, chain-scoped groups, tags, real
+chain artwork, Solana address derivation — is present on both.
+
+Try the macOS UI without touching your real vault — a throwaway temp vault with
 sample wallets:
 
 ```bash
@@ -132,12 +196,15 @@ Sources/SafeKeyCore/    Crypto, vault format, storage, unlock factors (no UI imp
   Vault/                Container codec, atomic store, self-destruct accounting
   Unlock/               Password, biometric, and USB device-key factors
   Keychain/             SecItem wrapper behind a protocol (tests use a fake)
-Sources/SafeKey/        SwiftUI app
+Sources/SafeKey/        macOS SwiftUI app
   Main/                 Three-pane UI: sidebar tiles, entry list, detail
   Settings/             General, Security, Self-Destruct, Disguise
   Services/             Auto-lock, clipboard guard, volume watcher, disguise
+Sources/SafeKeyiOS/     iOS SwiftUI app (list → detail, sheets, privacy cover)
+Sources/SafeKeyShared/  Used by both apps: vault session, chain artwork, SVG
 Tests/SafeKeyCoreTests/ Headless unit tests — no UI, no Keychain, no USB needed
-scripts/                Icon generation
+Tests/SafeKeyiOSUITests/ End-to-end iOS flows, biometrics, screenshot tour
+scripts/                Icon generation, simulator Face ID driver
 FORMAT.md               Byte-level vault spec (for the planned Windows port)
 ```
 

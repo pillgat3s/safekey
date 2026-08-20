@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Without an application-identifier the iOS Keychain rejects every call with
+	  errSecMissingEntitlement (-34018): no Face ID key, no failed-attempt
+	  counter, and no visible error to explain why. The team prefix matches the
+	  real signing team so this same file is valid for device builds.
+	-->
+	<key>application-identifier</key>
+	<string>RR9A8973M8.com.andri.safekey.ios</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>RR9A8973M8.com.andri.safekey.ios</string>
+	</array>
+</dict>
+</plist>

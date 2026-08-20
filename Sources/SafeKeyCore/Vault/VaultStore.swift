@@ -75,6 +75,26 @@ public actor VaultStore {
         try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: vaultURL.path)
     }
 
+    /// Whether the vault directory is held back from the device's iCloud/system
+    /// backup.
+    ///
+    /// Included is the default and the useful setting: the backup contains the
+    /// same sealed container that sits on disk, so iCloud only ever holds
+    /// ciphertext the master password already protects — and it is what lets a
+    /// vault survive a lost phone. Excluding it is for someone who would rather
+    /// lose the vault than have a copy leave the device.
+    public func isExcludedFromBackup() -> Bool {
+        (try? directory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup) == true
+    }
+
+    public func setExcludedFromBackup(_ excluded: Bool) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var url = directory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = excluded
+        try url.setResourceValues(values)
+    }
+
     nonisolated public var rescueURL: URL {
         directory.appendingPathComponent(Self.vaultFileName + ".pre-restore")
     }

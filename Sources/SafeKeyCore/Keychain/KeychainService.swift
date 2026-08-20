@@ -88,12 +88,20 @@ public struct KeychainService: SecretStore {
         // wrote it, so macOS demands the login-keychain password whenever the
         // app's signature changes. Naming this app as a trusted application
         // means it can read its own item back without prompting.
+        //
+        // iOS has no keychain ACLs — the system scopes every item to the app
+        // that wrote it — so there the accessibility attribute is always right
+        // and `SecAccess` does not even exist.
+        #if os(macOS)
         if trustingThisApp, let access = Self.accessTrustingThisApp() {
             attributes[kSecAttrAccess as String] = access
         } else {
             // `kSecAttrAccess` and `kSecAttrAccessible` are mutually exclusive.
             attributes[kSecAttrAccessible as String] = accessibility.secValue
         }
+        #else
+        attributes[kSecAttrAccessible as String] = accessibility.secValue
+        #endif
 
         let status = SecItemAdd(attributes as CFDictionary, nil)
         guard status == errSecSuccess else {
@@ -107,6 +115,7 @@ public struct KeychainService: SecretStore {
     /// on a login-keychain item, and the data-protection keychain (which would
     /// avoid this entirely) needs an `application-identifier` entitlement that
     /// requires a provisioning profile.
+    #if os(macOS)
     private static func accessTrustingThisApp() -> SecAccess? {
         var trusted: SecTrustedApplication?
         guard SecTrustedApplicationCreateFromPath(nil, &trusted) == errSecSuccess,
@@ -118,6 +127,7 @@ public struct KeychainService: SecretStore {
         }
         return access
     }
+    #endif
 
     public func delete(account: String) throws {
         try deleteBothDomains(account: account)

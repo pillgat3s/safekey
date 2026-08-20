@@ -8,6 +8,11 @@ public struct SelfDestructPolicy: Codable, Sendable, Equatable {
         self.enabled = enabled
         self.maxAttempts = maxAttempts
     }
+
+    /// The choices the UI offers. Fewer than three and an ordinary typo streak
+    /// erases the vault; more than ten and the limit stops bounding guesses in
+    /// any meaningful way.
+    public static let attemptRange = 3...10
 }
 
 /// Which factors are required to unlock. The volume fields are detection

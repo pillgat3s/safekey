@@ -1,0 +1,333 @@
+import SwiftUI
+import UniformTypeIdentifiers
+import SafeKeyCore
+
+struct SettingsView: View {
+    let session: VaultSession
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var biometricsEnabled = false
+    @State private var errorMessage: String?
+    @State private var infoMessage: String?
+    @State private var exportDocument: VaultBackupDocument?
+    @State private var showingExporter = false
+    @State private var showingImporter = false
+    @State private var pendingRestore: Data?
+    @State private var showingArmConfirmation = false
+    @State private var armConfirmationText = ""
+    @State private var includeInCloudBackup = true
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    if BiometricFactor.isBiometryAvailable() || biometricsEnabled {
+                        Toggle("Unlock with \(model.biometryName)", isOn: biometricsBinding)
+                    } else {
+                        Text("Biometric unlock isn't available on this device.")
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Unlocking")
+                }
+
+                Section {
+                    Picker("Ask before revealing", selection: revealPolicyBinding) {
+                        Text("Never").tag(RevealChoice.never)
+                        Text("Every time").tag(RevealChoice.everyTime)
+                        Text("After 5 minutes").tag(RevealChoice.after5)
+                    }
+                    Picker("Clear clipboard after", selection: clipboardBinding) {
+                        Text("30 seconds").tag(30 as Int?)
+                        Text("1 minute").tag(60 as Int?)
+                        Text("2 minutes").tag(120 as Int?)
+                        Text("Never").tag(nil as Int?)
+                    }
+                } header: {
+                    Text("Secrets")
+                } footer: {
+                    Text("The vault locks automatically whenever the app leaves the foreground.")
+                }
+
+                Section {
+                    NavigationLink("Groups") {
+                        GroupsView(session: session)
+                    }
+                } header: {
+                    Text("Organising")
+                }
+
+                Section {
+                    NavigationLink("Change Master Password") {
+                        ChangePasswordView(session: session)
+                    }
+                } header: {
+                    Text("Master Password")
+                }
+
+                Section {
+                    Toggle("Erase after failed attempts", isOn: selfDestructBinding)
+                    if session.header.selfDestruct.enabled {
+                        Stepper(
+                            "Allow \(session.header.selfDestruct.maxAttempts) attempts",
+                            value: attemptsBinding,
+                            in: SelfDestructPolicy.attemptRange
+                        )
+                    }
+                } header: {
+                    Text("Self-Destruct")
+                } footer: {
+                    Text("After this many wrong passwords in a row, SafeKey deletes the vault and every stored key — there is no undo and no recovery. A correct password resets the count. This protects a stolen phone; it does not protect a backup copy someone already took, so keep your backup somewhere you trust.")
+                }
+
+                Section {
+                    Toggle("Include in iCloud Backup", isOn: $includeInCloudBackup)
+                        .onChange(of: includeInCloudBackup) { _, include in
+                            setCloudBackup(include)
+                        }
+                } header: {
+                    Text("iCloud")
+                } footer: {
+                    Text("When your iPhone backs up to iCloud, the vault goes with it — as the same encrypted file, still opening only with your master password. Turn this off and a lost or replaced iPhone takes the vault with it unless you exported a backup yourself.")
+                }
+
+                Section {
+                    Button("Export Encrypted Backup…") { prepareExport() }
+                    Button("Replace from Backup…", role: .destructive) { showingImporter = true }
+                } header: {
+                    Text("Backup")
+                } footer: {
+                    Text("Saving to Files lets you keep a copy in iCloud Drive or send it to yourself. It is the same encrypted file — safe to store anywhere, useless to anyone without your master password.")
+                }
+
+                Section {
+                    LabeledContent("Wallets", value: "\(session.entries.count)")
+                    if let created = model.lockedHeader?.createdAt ?? session.header.createdAt as Date? {
+                        LabeledContent("Vault created", value: created.formatted(date: .abbreviated, time: .omitted))
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task {
+                biometricsEnabled = model.biometricFactor.isEnrolled(vaultID: session.header.vaultID)
+                includeInCloudBackup = await !model.store.isExcludedFromBackup()
+            }
+            .fileExporter(
+                isPresented: $showingExporter,
+                document: exportDocument,
+                contentType: .data,
+                defaultFilename: "SafeKey Backup"
+            ) { result in
+                if case .failure(let error) = result {
+                    errorMessage = error.localizedDescription
+                } else {
+                    infoMessage = "Encrypted backup saved."
+                }
+            }
+            .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.data]) { result in
+                switch result {
+                case .success(let url): loadBackup(url)
+                case .failure(let error): errorMessage = error.localizedDescription
+                }
+            }
+            .alert("Settings", isPresented: alertBinding(for: $errorMessage)) {
+                Button("OK", role: .cancel) {}
+            } message: { Text(errorMessage ?? "") }
+            .alert("Backup", isPresented: alertBinding(for: $infoMessage)) {
+                Button("OK", role: .cancel) {}
+            } message: { Text(infoMessage ?? "") }
+            .alert("Arm self-destruct?", isPresented: $showingArmConfirmation) {
+                TextField("Type DELETE", text: $armConfirmationText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                Button("Cancel", role: .cancel) { armConfirmationText = "" }
+                Button("Arm", role: .destructive) { confirmArm() }
+                    .disabled(armConfirmationText != "DELETE")
+            } message: {
+                Text("Once armed, \(session.header.selfDestruct.maxAttempts) wrong passwords in a row will erase this vault permanently. Type DELETE to confirm you understand.")
+            }
+            .alert("Replace this vault?", isPresented: restoreBinding) {
+                Button("Cancel", role: .cancel) { pendingRestore = nil }
+                Button("Replace", role: .destructive) { confirmRestore() }
+            } message: {
+                Text("This erases the vault on this device and replaces it with the backup. You will unlock it with the backup's own master password.")
+            }
+        }
+    }
+
+    // MARK: - Bindings
+
+    private enum RevealChoice: Hashable { case never, everyTime, after5 }
+
+    private func alertBinding(for message: Binding<String?>) -> Binding<Bool> {
+        Binding(get: { message.wrappedValue != nil }, set: { if !$0 { message.wrappedValue = nil } })
+    }
+
+    private var restoreBinding: Binding<Bool> {
+        Binding(get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } })
+    }
+
+    private var revealPolicyBinding: Binding<RevealChoice> {
+        Binding(
+            get: {
+                switch session.settings.revealPolicy {
+                case .never: .never
+                case .everyTime: .everyTime
+                case .afterMinutes: .after5
+                }
+            },
+            set: { choice in
+                var settings = session.settings
+                settings.revealPolicy = switch choice {
+                case .never: .never
+                case .everyTime: .everyTime
+                case .after5: .afterMinutes(5)
+                }
+                session.updateSettings(settings)
+            }
+        )
+    }
+
+    private var clipboardBinding: Binding<Int?> {
+        Binding(
+            get: { session.settings.clipboardClearSeconds },
+            set: { newValue in
+                var settings = session.settings
+                settings.clipboardClearSeconds = newValue
+                session.updateSettings(settings)
+            }
+        )
+    }
+
+    /// Arming is deliberately harder than disarming: turning it on routes
+    /// through a typed confirmation, turning it off is immediate.
+    private var selfDestructBinding: Binding<Bool> {
+        Binding(
+            get: { session.header.selfDestruct.enabled },
+            set: { enable in
+                if enable {
+                    armConfirmationText = ""
+                    showingArmConfirmation = true
+                } else {
+                    session.updateHeader { $0.selfDestruct.enabled = false }
+                }
+            }
+        )
+    }
+
+    private func confirmArm() {
+        guard armConfirmationText == "DELETE" else { return }
+        armConfirmationText = ""
+        session.updateHeader { $0.selfDestruct.enabled = true }
+    }
+
+    private var attemptsBinding: Binding<Int> {
+        Binding(
+            get: { session.header.selfDestruct.maxAttempts },
+            set: { newValue in session.updateHeader { $0.selfDestruct.maxAttempts = newValue } }
+        )
+    }
+
+    private var biometricsBinding: Binding<Bool> {
+        Binding(
+            get: { biometricsEnabled },
+            set: { enable in
+                // Move the switch straight away and put it back if the attempt
+                // fails. Leaving it off until Face ID returns makes the tap
+                // look ignored for as long as the prompt is up.
+                biometricsEnabled = enable
+                if enable {
+                    Task {
+                        do {
+                            _ = try await model.enableBiometricUnlock()
+                        } catch BiometricError.cancelled {
+                            biometricsEnabled = false
+                        } catch {
+                            errorMessage = "Could not enable \(model.biometryName): \(error.localizedDescription)"
+                            biometricsEnabled = false
+                        }
+                    }
+                } else {
+                    do {
+                        try model.disableBiometricUnlock()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                        biometricsEnabled = true
+                    }
+                }
+            }
+        )
+    }
+
+    private func setCloudBackup(_ include: Bool) {
+        Task {
+            do {
+                try await model.store.setExcludedFromBackup(!include)
+            } catch {
+                errorMessage = "Could not change the iCloud backup setting: \(error.localizedDescription)"
+                includeInCloudBackup = await !model.store.isExcludedFromBackup()
+            }
+        }
+    }
+
+    // MARK: - Backup
+
+    private func prepareExport() {
+        do {
+            exportDocument = VaultBackupDocument(data: try model.exportVaultData())
+            showingExporter = true
+        } catch {
+            errorMessage = "Could not prepare the backup: \(error.localizedDescription)"
+        }
+    }
+
+    private func loadBackup(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let data = try Data(contentsOf: url)
+            _ = try model.inspectBackup(data)
+            pendingRestore = data
+        } catch {
+            errorMessage = "That file is not a valid SafeKey backup."
+        }
+    }
+
+    private func confirmRestore() {
+        guard let data = pendingRestore else { return }
+        pendingRestore = nil
+        Task {
+            do {
+                try await model.importVault(data)
+                dismiss()
+            } catch {
+                errorMessage = "Could not restore the backup: \(error.localizedDescription)"
+            }
+        }
+    }
+}
+
+/// Wrapper so the encrypted container can go through the system file exporter.
+/// Carries the sealed bytes untouched — no decryption anywhere in this path.
+struct VaultBackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.data] }
+
+    let data: Data
+
+    init(data: Data) { self.data = data }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}

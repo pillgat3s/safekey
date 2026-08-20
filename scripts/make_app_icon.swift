@@ -37,7 +37,10 @@ let iconAppearance = Appearance(
 
 let symbolName = "key.radiowaves.forward.fill"
 
-func renderPNG(_ appearance: Appearance, pixels: Int) -> Data {
+/// `fullBleed` fills the whole square with no rounded corners and no rim: iOS
+/// masks the icon itself, and an icon that draws its own corners ends up with a
+/// visible double-rounded edge.
+func renderPNG(_ appearance: Appearance, pixels: Int, fullBleed: Bool = false, transparentBackground: Bool = false) -> Data {
     guard let rep = NSBitmapImageRep(
         bitmapDataPlanes: nil,
         pixelsWide: pixels, pixelsHigh: pixels,
@@ -54,15 +57,19 @@ func renderPNG(_ appearance: Appearance, pixels: Int) -> Data {
 
     let size = CGFloat(pixels)
     let rect = NSRect(x: 0, y: 0, width: size, height: size)
-    let shape = rect.insetBy(dx: size * 0.08, dy: size * 0.08)
-    let path = NSBezierPath(roundedRect: shape, xRadius: size * 0.22, yRadius: size * 0.22)
+    let shape = fullBleed ? rect : rect.insetBy(dx: size * 0.08, dy: size * 0.08)
+    let path = fullBleed
+        ? NSBezierPath(rect: shape)
+        : NSBezierPath(roundedRect: shape, xRadius: size * 0.22, yRadius: size * 0.22)
 
-    NSGraphicsContext.current?.cgContext.saveGState()
-    path.addClip()
-    NSGradient(colors: [appearance.top, appearance.bottom])?.draw(in: shape, angle: -90)
-    NSGraphicsContext.current?.cgContext.restoreGState()
+    if !transparentBackground {
+        NSGraphicsContext.current?.cgContext.saveGState()
+        path.addClip()
+        NSGradient(colors: [appearance.top, appearance.bottom])?.draw(in: shape, angle: -90)
+        NSGraphicsContext.current?.cgContext.restoreGState()
+    }
 
-    if let rim = appearance.rim {
+    if let rim = appearance.rim, !fullBleed {
         rim.setStroke()
         path.lineWidth = max(1, size * 0.008)
         path.stroke()
@@ -124,3 +131,71 @@ writeJSON(["images": iconImages, "info": ["version": 1, "author": "xcode"]], to:
 writeJSON(["info": ["version": 1, "author": "xcode"]], to: "\(assets)/Contents.json")
 
 print("wrote \(iconImages.count) app-icon images")
+
+// MARK: iOS app icon
+//
+// iOS 18 takes a single 1024pt universal image per appearance and does its own
+// masking and downscaling. The tinted variant is drawn in greyscale because the
+// system remaps its luminance onto the user's chosen tint.
+
+let iosAssets = "Sources/SafeKeyiOS/Resources/Assets.xcassets"
+let iosIconset = "\(iosAssets)/AppIcon.appiconset"
+try? FileManager.default.removeItem(atPath: iosIconset)
+try! FileManager.default.createDirectory(atPath: iosIconset, withIntermediateDirectories: true)
+
+let iosLight = Appearance(
+    top: NSColor(srgbRed: 0.20, green: 0.20, blue: 0.22, alpha: 1),
+    bottom: NSColor(srgbRed: 0.05, green: 0.05, blue: 0.06, alpha: 1),
+    glyph: NSColor(srgbRed: 0.04, green: 0.52, blue: 1.00, alpha: 1),
+    rim: nil
+)
+// Dark mode draws no background of its own — iOS composites the glyph over the
+// system's dark material, which is what makes it sit right next to Apple's.
+let iosDark = Appearance(
+    top: .clear, bottom: .clear,
+    glyph: NSColor(srgbRed: 0.28, green: 0.64, blue: 1.00, alpha: 1),
+    rim: nil
+)
+let iosTinted = Appearance(
+    top: .clear, bottom: .clear,
+    glyph: NSColor(white: 0.92, alpha: 1),
+    rim: nil
+)
+
+struct IOSVariant {
+    let filename: String
+    let appearance: Appearance
+    let luminosity: String?
+    let transparent: Bool
+}
+
+let iosVariants = [
+    IOSVariant(filename: "icon_1024.png", appearance: iosLight, luminosity: nil, transparent: false),
+    IOSVariant(filename: "icon_1024_dark.png", appearance: iosDark, luminosity: "dark", transparent: true),
+    IOSVariant(filename: "icon_1024_tinted.png", appearance: iosTinted, luminosity: "tinted", transparent: true),
+]
+
+var iosImages: [[String: Any]] = []
+for variant in iosVariants {
+    let png = renderPNG(
+        variant.appearance,
+        pixels: 1024,
+        fullBleed: true,
+        transparentBackground: variant.transparent
+    )
+    try! png.write(to: URL(fileURLWithPath: "\(iosIconset)/\(variant.filename)"))
+    var entry: [String: Any] = [
+        "idiom": "universal",
+        "platform": "ios",
+        "size": "1024x1024",
+        "filename": variant.filename,
+    ]
+    if let luminosity = variant.luminosity {
+        entry["appearances"] = [["appearance": "luminosity", "value": luminosity]]
+    }
+    iosImages.append(entry)
+}
+writeJSON(["images": iosImages, "info": ["version": 1, "author": "xcode"]], to: "\(iosIconset)/Contents.json")
+writeJSON(["info": ["version": 1, "author": "xcode"]], to: "\(iosAssets)/Contents.json")
+
+print("wrote \(iosImages.count) iOS app-icon images")

@@ -26,6 +26,7 @@ final class AppModel {
     init(store: VaultStore = VaultStore(), keychain: KeychainService = KeychainService()) {
         self.store = store
         self.keychain = keychain
+        self.biometricFactor = BiometricFactor(service: keychain.service)
     }
 
     private var activeStore: VaultStore { demoState?.0 ?? store }
@@ -71,7 +72,10 @@ final class AppModel {
 
     // MARK: - Biometrics
 
-    let biometricFactor = BiometricFactor()
+    /// Shares the Keychain service with `keychain`, so the biometric copy of
+    /// the data key lives in the same namespace self-destruct wipes — and so
+    /// an isolated (test) vault cannot reach the real one's biometric key.
+    let biometricFactor: BiometricFactor
 
     /// Cached: the enrolment check touches the Keychain, and SwiftUI reads this
     /// from view bodies on every render.
@@ -139,7 +143,8 @@ final class AppModel {
         return try await biometricFactor.enable(
             secret: blob,
             vaultID: session.header.vaultID,
-            confirm: confirm
+            confirm: confirm,
+            reason: "enable Touch ID unlock for this vault"
         )
     }
 

@@ -3,37 +3,35 @@ options:
   bundleIdPrefix: com.andri
   deploymentTarget:
     macOS: "26.0"
+    iOS: "18.0"
   createIntermediateGroups: true
 settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    MACOSX_DEPLOYMENT_TARGET: "26.0"
-    # Signed with a stable identity rather than ad-hoc. An ad-hoc signature has
-    # no persistent identity — every rebuild looks like a different app — so
-    # Keychain ACLs never match and macOS prompts for the login password after
-    # each update, and stored Touch ID keys stop being readable.
-    CODE_SIGN_IDENTITY: "Apple Development: thomannandri@gmail.com (R6QBGGCUGC)"
-    CODE_SIGN_STYLE: Manual
-    ENABLE_HARDENED_RUNTIME: NO
     DEAD_CODE_STRIPPING: YES
     GENERATE_INFOPLIST_FILE: YES
 targets:
+  # One audited core, compiled for both platforms. It imports no AppKit and no
+  # UIKit, so the security-critical code is the same source on Mac and iPhone
+  # rather than a port that can drift out of sync.
   SafeKeyCore:
     type: framework
-    platform: macOS
+    platform: [macOS, iOS]
     sources:
       - Sources/SafeKeyCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.core
+
   SafeKey:
     type: application
     platform: macOS
     sources:
       - Sources/SafeKey
+      - Sources/SafeKeyShared
     dependencies:
-      - target: SafeKeyCore
+      - target: SafeKeyCore_macOS
         embed: true
       # LAAuthenticationView — renders the Touch ID prompt inside the app's own
       # window instead of as a floating system panel.
@@ -42,6 +40,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        ENABLE_HARDENED_RUNTIME: NO
+        # A stable signing identity: ad-hoc signatures change on every rebuild,
+        # so Keychain ACLs stop matching and stored Touch ID keys break.
+        CODE_SIGN_IDENTITY: "Apple Development: thomannandri@gmail.com (R6QBGGCUGC)"
+        CODE_SIGN_STYLE: Manual
     info:
       path: Sources/SafeKey/Info.plist
       properties:
@@ -52,16 +56,88 @@ targets:
         NSSupportsSuddenTermination: false
         LSMinimumSystemVersion: "26.0"
         NSHumanReadableCopyright: ""
+
+  SafeKeyiOS:
+    type: application
+    platform: iOS
+    sources:
+      - Sources/SafeKeyiOS
+      - Sources/SafeKeyShared
+    dependencies:
+      - target: SafeKeyCore_iOS
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.ios
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Ad-hoc ("sign to run locally") rather than unsigned: an unsigned
+        # bundle carries no application-identifier, and without it every
+        # Keychain call returns errSecMissingEntitlement — which would break
+        # Face ID unlock and the failed-attempt counter without any visible
+        # error. Set a real team + identity for device builds.
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "YES"
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGN_ENTITLEMENTS: Sources/SafeKeyiOS/SafeKeyiOS.entitlements
+    info:
+      path: Sources/SafeKeyiOS/Info.plist
+      properties:
+        CFBundleDisplayName: SafeKey
+        UILaunchScreen: {}
+        NSFaceIDUsageDescription: "SafeKey uses Face ID to unlock your vault."
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+
   SafeKeyCoreTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - Tests/SafeKeyCoreTests
     dependencies:
-      - target: SafeKeyCore
+      - target: SafeKeyCore_macOS
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.coretests
+
+  SafeKeyCoreiOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/SafeKeyCoreTests
+    dependencies:
+      - target: SafeKeyCore_iOS
+      # Hosted in the app so the tests inherit its Keychain entitlement. A
+      # standalone iOS test bundle has no application-identifier, so every
+      # Keychain call in it fails with errSecMissingEntitlement.
+      - target: SafeKeyiOS
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.coretests.ios
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "YES"
+        CODE_SIGNING_ALLOWED: "YES"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SafeKeyiOS.app/SafeKeyiOS"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+  SafeKeyiOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests/SafeKeyiOSUITests
+    dependencies:
+      - target: SafeKeyiOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.uitests.ios
+        TEST_TARGET_NAME: SafeKeyiOS
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "YES"
+        CODE_SIGNING_ALLOWED: "YES"
+
   SafeKeyUITests:
     type: bundle.ui-testing
     platform: macOS
@@ -73,14 +149,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.uitests
         TEST_TARGET_NAME: SafeKey
+
 schemes:
   SafeKey:
     build:
       targets:
         SafeKey: all
-        SafeKeyCore: all
+        SafeKeyCore_macOS: all
         SafeKeyCoreTests: [test]
-        SafeKeyUITests: [test]
     run:
       config: Debug
     test:
@@ -88,13 +164,19 @@ schemes:
       gatherCoverageData: false
       targets:
         - SafeKeyCoreTests
-  SafeKeyUI:
+
+  SafeKeyiOS:
     build:
       targets:
-        SafeKey: all
-        SafeKeyUITests: [test]
+        SafeKeyiOS: all
+        SafeKeyCore_iOS: all
+        SafeKeyCoreiOSTests: [test]
+        SafeKeyiOSUITests: [test]
+    run:
+      config: Debug
     test:
       config: Debug
       gatherCoverageData: false
       targets:
-        - SafeKeyUITests
+        - SafeKeyCoreiOSTests
+        - SafeKeyiOSUITests

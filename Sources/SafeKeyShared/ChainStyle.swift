@@ -1,5 +1,10 @@
 import SwiftUI
 import SafeKeyCore
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+#endif
 
 extension Chain {
     var color: Color { Color(hex: colorHex) }
@@ -22,13 +27,18 @@ extension Color {
     /// Brand colours like Aptos black or Cosmos near-black vanish against a
     /// dark sidebar; nudge very dark colours up so the tile stays legible.
     var legibleOnDarkBackground: Color {
-        let nsColor = NSColor(self).usingColorSpace(.sRGB)
-        guard let nsColor else { return self }
-        let luminance = 0.299 * nsColor.redComponent
-            + 0.587 * nsColor.greenComponent
-            + 0.114 * nsColor.blueComponent
+        #if canImport(UIKit)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a) else { return self }
+        #else
+        guard let ns = NSColor(self).usingColorSpace(.sRGB) else { return self }
+        let (r, g, b) = (ns.redComponent, ns.greenComponent, ns.blueComponent)
+        #endif
+        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
         guard luminance < 0.22 else { return self }
-        return Color(nsColor.blended(withFraction: 0.35, of: .white) ?? nsColor)
+        // Blend 35% toward white — the same lift on both platforms.
+        let lift: (CGFloat) -> Double = { Double($0 + (1 - $0) * 0.35) }
+        return Color(.sRGB, red: lift(r), green: lift(g), blue: lift(b))
     }
 }
 

@@ -144,9 +144,17 @@ public struct BiometricFactor: Sendable {
     /// just authenticated for by other means — a key rotation, say — where a
     /// second prompt would be noise rather than security.
     @discardableResult
-    public func enable(secret: Data, vaultID: UUID, confirm: Bool = true) async throws -> Strategy {
+    /// `reason` is the subtitle of the system prompt; each app passes wording
+    /// naming the biometry the device actually has, since a Mac saying "Face
+    /// ID" (or an iPhone saying "Touch ID") reads as a different app's prompt.
+    public func enable(
+        secret: Data,
+        vaultID: UUID,
+        confirm: Bool = true,
+        reason: String = "enable biometric unlock for this vault"
+    ) async throws -> Strategy {
         if confirm {
-            try await evaluateBiometrics(reason: "enable Touch ID unlock for this vault")
+            try await evaluateBiometrics(reason: reason)
         }
         try? disable(vaultID: vaultID)
         let strategy: Strategy
