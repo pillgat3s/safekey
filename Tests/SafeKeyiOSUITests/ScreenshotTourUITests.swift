@@ -93,13 +93,16 @@ final class ScreenshotTourUITests: XCTestCase {
             app.buttons["Groups"].tap()
             XCTAssertTrue(app.navigationBars["Groups"].waitForExistence(timeout: timeout))
             capture("08a-groups")
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            // Scope to this screen's bar by title: on iPad the settings sheet is
+            // a form sheet, so the list's navigation bar is on screen too and an
+            // unscoped query can pick a button out of the wrong one.
+            app.navigationBars["Groups"].buttons.firstMatch.tap()
         }
         if app.buttons["Change Master Password"].waitForExistence(timeout: 5) {
             app.buttons["Change Master Password"].tap()
             XCTAssertTrue(app.navigationBars["Master Password"].waitForExistence(timeout: timeout))
             capture("08b-change-password")
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars["Master Password"].buttons.firstMatch.tap()
         }
 
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: timeout))

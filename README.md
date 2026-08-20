@@ -145,6 +145,10 @@ Two suites are worth knowing about:
   burns the attempts, checking the vault is erased **and stays erased across a
   relaunch** — and that a correct password resets the counter, so a near-miss
   cannot carry over and erase the vault weeks later.
+- `LayoutUITests` rotates to landscape and checks every control is still
+  reachable. The lock and onboarding screens cap their content at a 460pt
+  centred column: without it a landscape iPhone — and every iPad — renders a
+  password field the full width of the screen.
 - `BackupRoundTripiOSTests` covers the recovery path the UI tests cannot reach
   (export and restore go through the system document picker): entries survive a
   round trip, the exported file holds no plaintext, a rejected import leaves the
@@ -164,6 +168,11 @@ runner's container, for reviewing the UI without driving the simulator by hand:
 ```bash
 xcrun simctl get_app_container <udid> com.andri.safekey.uitests.ios.xctrunner data
 ```
+
+The suites also run on iPad (`-destination 'platform=iOS Simulator,name=iPad
+Pro 11-inch (M5)'`). iPad gets the iPhone layout enlarged rather than a
+purpose-built one — no split view — which is a deliberate v1 choice, not an
+oversight. `TARGETED_DEVICE_FAMILY: "1"` would restrict to iPhone.
 
 **Installing on a real iPhone.** The simulator build is signed ad-hoc, which
 a device will not run. For a device build set a signing identity and let Xcode

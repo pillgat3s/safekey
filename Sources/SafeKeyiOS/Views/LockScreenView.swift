@@ -101,6 +101,11 @@ struct LockScreenView: View {
             Spacer()
             Spacer()
         }
+        // A single column rather than controls stretched across the full
+        // width: without this a landscape iPhone — and any iPad — renders a
+        // password field the width of the screen.
+        .frame(maxWidth: 460)
+        .frame(maxWidth: .infinity)
         .task {
             guard model.canUnlockWithBiometrics, !didOfferBiometrics else { return }
             didOfferBiometrics = true

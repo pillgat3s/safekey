@@ -101,7 +101,7 @@ final class GroupsUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Long Term"].waitForExistence(timeout: timeout))
 
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars["Groups"].buttons.firstMatch.tap()
         app.buttons["Done"].tap()
         XCTAssertTrue(
             app.staticTexts["EVM · Private Key · Long Term"].waitForExistence(timeout: timeout),
@@ -126,7 +126,7 @@ final class GroupsUITests: XCTestCase {
             "the group should be gone"
         )
 
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars["Groups"].buttons.firstMatch.tap()
         app.buttons["Done"].tap()
         XCTAssertTrue(
             app.staticTexts["Trading"].waitForExistence(timeout: timeout),

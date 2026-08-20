@@ -78,6 +78,8 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, 28)
             .padding(.bottom, 40)
+            .frame(maxWidth: 460)
+            .frame(maxWidth: .infinity)
         }
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.data]) { result in
             switch result {
