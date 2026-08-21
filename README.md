@@ -127,8 +127,12 @@ SafeKey can present itself as something else:
 - **Bundle rebrand** — rewrites `CFBundleDisplayName`/`CFBundleName` and the
   `.icns` inside the app bundle, re-signs ad-hoc, and relaunches, so Finder,
   Spotlight, and the Dock all show the disguise. The bundle identifier is never
-  touched (the vault path and Keychain items depend on it). Reversible from the
-  same screen.
+  touched (the vault path and Keychain items depend on it). The name and icon
+  are reversible from the same screen; **the signature is not**. Re-signing
+  replaces the app's entitlements, and an ad-hoc signature cannot carry the
+  Keychain access group or the iCloud container, so Touch ID unlock and iCloud
+  sync stop working until SafeKey is reinstalled. The app says so before it
+  rebrands. Nothing about the vault itself is affected.
 
 Presets include document-style icons ("Quarterly Report", "Receipts 2024") that
 read as files rather than apps when extensions are hidden, plus a free-text

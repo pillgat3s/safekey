@@ -90,6 +90,28 @@ final class DisguiseManager {
         FileManager.default.isWritableFile(atPath: Bundle.main.bundleURL.path)
     }
 
+    /// Whether the bundle on disk carries a disguise, as opposed to only the
+    /// running app's Dock icon.
+    ///
+    /// Read from the loaded Info.plist, which is safe: a rebrand relaunches, so
+    /// what this process started with is what is on disk.
+    var bundleIsRebranded: Bool {
+        let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+        return name != nil && name != DisguisePreset.original.displayName
+    }
+
+    /// What a rebrand costs, because the re-sign below is ad-hoc.
+    ///
+    /// Signing a bundle again replaces its entitlements, and an ad-hoc
+    /// signature cannot carry the ones this app is granted: the Keychain access
+    /// group and the iCloud container are tied to a team identity. Without them
+    /// the Keychain refuses every call (errSecMissingEntitlement) and CloudKit
+    /// has no container to reach — so Touch ID unlock and iCloud sync both
+    /// stop, and reverting cannot bring them back, because the original
+    /// signature needs a certificate this Mac is not required to have.
+    /// Reinstalling the app restores both.
+    static let rebrandCost = "Rebranding re-signs SafeKey, and a re-signed copy loses the permissions Apple grants it. Touch ID unlock and iCloud sync stop working until you reinstall SafeKey — reverting the disguise does not bring them back. Your vault and everything in it are untouched either way."
+
     /// Rewrites the bundle so Finder/Dock/Spotlight show the disguise, then
     /// relaunches. The running binary is never modified — only Info.plist and
     /// the icon resource — because rewriting the executable of a running
@@ -134,8 +156,45 @@ final class DisguiseManager {
         }
     }
 
-    func revertBundle() throws {
-        try rebrandBundle(preset: .original, customName: "")
+    /// Puts the bundle back to the name and icon it shipped with.
+    ///
+    /// Not `rebrandBundle(preset: .original)`: that would leave a *rendered*
+    /// copy of the app icon in `Resources` and keep pointing at it. Dropping
+    /// the override instead hands the icon back to the asset catalog, which is
+    /// where the real one lives.
+    ///
+    /// What it cannot undo is the signature — see ``rebrandCost``.
+    func revertBundle(relaunch shouldRelaunch: Bool = true) throws {
+        let bundleURL = Bundle.main.bundleURL
+        guard bundleIsWritable else { throw RebrandError.notWritable }
+        let contents = bundleURL.appendingPathComponent("Contents")
+        let plistURL = contents.appendingPathComponent("Info.plist")
+
+        guard var plist = NSMutableDictionary(contentsOf: plistURL) as? [String: Any] else {
+            throw RebrandError.plistFailed
+        }
+        let original = DisguisePreset.original.displayName
+        plist["CFBundleDisplayName"] = original
+        plist["CFBundleName"] = original
+        plist.removeValue(forKey: "CFBundleIconFile")
+
+        do {
+            let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+            try data.write(to: plistURL)
+        } catch {
+            throw RebrandError.plistFailed
+        }
+
+        let icnsURL = contents
+            .appendingPathComponent("Resources")
+            .appendingPathComponent("AppIcon.icns")
+        try? FileManager.default.removeItem(at: icnsURL)
+
+        try resign(bundleURL: bundleURL)
+        select(presetID: DisguisePreset.original.id, customName: "")
+        if shouldRelaunch {
+            relaunch(bundleURL: bundleURL)
+        }
     }
 
     // MARK: - Internals

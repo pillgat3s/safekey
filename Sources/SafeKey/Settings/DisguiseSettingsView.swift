@@ -5,6 +5,7 @@ struct DisguiseSettingsView: View {
     @State private var selectedPresetID: String = DisguiseManager.shared.currentPresetID
     @State private var customName: String = DisguiseManager.shared.customName
     @State private var showingRebrandConfirmation = false
+    @State private var showingRevertConfirmation = false
     @State private var errorMessage: String?
 
     private var selectedPreset: DisguisePreset {
@@ -76,11 +77,20 @@ struct DisguiseSettingsView: View {
                     showingRebrandConfirmation = true
                 }
                 .disabled(!manager.bundleIsWritable)
-                if manager.currentPresetID != DisguisePreset.original.id || !manager.customName.isEmpty {
+                if manager.currentPresetID != DisguisePreset.original.id
+                    || !manager.customName.isEmpty
+                    || manager.bundleIsRebranded {
                     Button("Revert to SafeKey", role: .destructive) {
-                        selectedPresetID = DisguisePreset.original.id
-                        customName = ""
-                        manager.select(presetID: DisguisePreset.original.id, customName: "")
+                        // Two different jobs behind one button: putting the
+                        // Dock icon back costs nothing, putting the *bundle*
+                        // back rewrites and relaunches it, so that one asks.
+                        if manager.bundleIsRebranded {
+                            showingRevertConfirmation = true
+                        } else {
+                            selectedPresetID = DisguisePreset.original.id
+                            customName = ""
+                            manager.select(presetID: DisguisePreset.original.id, customName: "")
+                        }
                     }
                 }
             } header: {
@@ -88,7 +98,9 @@ struct DisguiseSettingsView: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("“Apply to Dock Now” changes the running app immediately and is remembered at launch.")
-                    Text("“Rebrand App Bundle” also rewrites the app's name and icon on disk so Finder and Spotlight show the disguise. SafeKey re-signs itself and relaunches; your vault is untouched.")
+                    Text("“Rebrand App Bundle” also rewrites the app's name and icon on disk so Finder and Spotlight show the disguise. SafeKey re-signs itself and relaunches.")
+                    Text(DisguiseManager.rebrandCost)
+                        .foregroundStyle(.orange)
                     if !manager.bundleIsWritable {
                         Text("Rebranding is unavailable because this copy of SafeKey isn't writable — move it to /Applications or your home folder.")
                             .foregroundStyle(.orange)
@@ -103,7 +115,13 @@ struct DisguiseSettingsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Rebrand & Relaunch") { rebrand() }
         } message: {
-            Text("SafeKey will appear as “\(effectiveName)” everywhere, re-sign itself, and relaunch. You can revert any time from this screen.")
+            Text("SafeKey will appear as “\(effectiveName)” everywhere, re-sign itself, and relaunch.\n\n\(DisguiseManager.rebrandCost)")
+        }
+        .alert("Revert to SafeKey?", isPresented: $showingRevertConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Revert & Relaunch") { revert() }
+        } message: {
+            Text("The app's name and icon go back to SafeKey, and it relaunches.\n\nThis does not restore Touch ID unlock or iCloud sync — reinstalling SafeKey is what brings those back.")
         }
         .alert("Rebrand Failed", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
@@ -122,6 +140,14 @@ struct DisguiseSettingsView: View {
     private func rebrand() {
         do {
             try manager.rebrandBundle(preset: selectedPreset, customName: customName)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func revert() {
+        do {
+            try manager.revertBundle()
         } catch {
             errorMessage = error.localizedDescription
         }

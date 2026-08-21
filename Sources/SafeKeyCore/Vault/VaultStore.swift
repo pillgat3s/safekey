@@ -99,14 +99,11 @@ public actor VaultStore {
         directory.appendingPathComponent("sync.json")
     }
 
-    /// Per-vault sync bookkeeping: the server change token and what each
-    /// wallet looked like when the server last agreed. Not secret — it holds
-    /// ids and dates, never a name or a key — but kept 0600 alongside the
+    /// Per-vault sync bookkeeping: the change token, a digest of what iCloud
+    /// holds for each record, and deletions not sent yet. Not secret — ids,
+    /// digests and dates, never a name or a key — but kept 0600 alongside the
     /// vault regardless.
-    public func loadSyncState() -> Data? {
-        try? Data(contentsOf: syncStateURL)
-    }
-
+    ///
     /// Written on the calling thread rather than through the actor.
     ///
     /// The file records deletions that have not reached iCloud yet, and a
@@ -114,15 +111,6 @@ public actor VaultStore {
     /// deletion the other device never hears about. It is a few hundred bytes
     /// of ids, and the coordinator that writes it is its only writer.
     nonisolated public func saveSyncStateNow(_ data: Data) throws {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: syncStateURL, options: [.atomic])
-        try? FileManager.default.setAttributes(
-            [.posixPermissions: 0o600],
-            ofItemAtPath: syncStateURL.path
-        )
-    }
-
-    public func saveSyncState(_ data: Data) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try data.write(to: syncStateURL, options: [.atomic])
         try? FileManager.default.setAttributes(
