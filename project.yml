@@ -41,14 +41,24 @@ targets:
       - sdk: LocalAuthenticationEmbeddedUI.framework
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey
+        # ".mac" because plain com.andri.safekey is already registered to
+        # someone else and cannot be claimed. The vault lives at a path derived
+        # from the app *name*, and the Keychain service is a fixed string, so
+        # neither moves when this changes.
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.mac
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_ENTITLEMENTS: Sources/SafeKey/SafeKey.entitlements
         # A stable signing identity: ad-hoc signatures change on every rebuild,
         # so Keychain ACLs stop matching and stored Touch ID keys break.
-        CODE_SIGN_IDENTITY: "Apple Development: thomannandri@gmail.com (R6QBGGCUGC)"
-        CODE_SIGN_STYLE: Manual
+        # Automatic rather than manual because an iCloud entitlement needs a
+        # provisioning profile that grants the container, and only automatic
+        # signing will fetch one. The certificate is the same either way, so the
+        # signing identity — and therefore the Keychain ACLs — do not change.
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: RR9A8973M8
     info:
       path: Sources/SafeKey/Info.plist
       properties:
@@ -74,12 +84,15 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.ios
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        # Ad-hoc ("sign to run locally") rather than unsigned: an unsigned
-        # bundle carries no application-identifier, and without it every
-        # Keychain call returns errSecMissingEntitlement — which would break
-        # Face ID unlock and the failed-attempt counter without any visible
-        # error. Set a real team + identity for device builds.
-        CODE_SIGN_IDENTITY: "-"
+        # Real development signing, not ad-hoc. An unsigned bundle carries no
+        # application-identifier, and without it every Keychain call returns
+        # errSecMissingEntitlement — no Face ID, no attempt counter, no visible
+        # error. Ad-hoc ("Sign to Run Locally") fixes that but leaves Xcode
+        # with no team, so it cannot register capabilities against the App ID,
+        # which is what an iCloud container needs.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: RR9A8973M8
+        CODE_SIGN_IDENTITY: "Apple Development"
         CODE_SIGNING_REQUIRED: "YES"
         CODE_SIGNING_ALLOWED: "YES"
         CODE_SIGN_ENTITLEMENTS: Sources/SafeKeyiOS/SafeKeyiOS.entitlements

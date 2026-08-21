@@ -18,6 +18,7 @@ struct AddressDerivationView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var candidates: [SolanaAddress.Candidate] = []
+    @State private var derivationPassphrase = ""
     @State private var errorMessage: String?
     @State private var isWorking = true
 
@@ -35,6 +36,18 @@ struct AddressDerivationView: View {
                     }
                 } else {
                     List {
+                        if kind.isSeedPhrase {
+                            Section {
+                                SecureField("BIP-39 passphrase (optional)", text: $derivationPassphrase)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onSubmit { Task { await derive() } }
+                                Button("Derive Again") { Task { await derive() } }
+                            } footer: {
+                                Text("If none of these match your wallet, it most likely uses a BIP-39 passphrase — the optional \"25th word\" set when the wallet was created. Without it the addresses are completely different.")
+                                    .font(.caption)
+                            }
+                        }
+
                         Section {
                             ForEach(candidates) { candidate in
                                 row(candidate)
@@ -110,9 +123,10 @@ struct AddressDerivationView: View {
         isWorking = true
         errorMessage = nil
         let entry = WalletEntry(name: "", chain: chain, kind: kind, secret: secret)
+        let passphrase = derivationPassphrase
         // PBKDF2 over 2048 rounds per candidate — off the main actor.
         let result = await Task.detached(priority: .userInitiated) {
-            Result { try SolanaAddress.candidates(for: entry) }
+            Result { try SolanaAddress.candidates(for: entry, passphrase: passphrase) }
         }.value
         switch result {
         case .success(let derived):

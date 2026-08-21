@@ -27,6 +27,7 @@ final class AppModel {
         self.store = store
         self.keychain = keychain
         self.biometricFactor = BiometricFactor(service: keychain.service)
+        self.sync = SyncCoordinator(store: store)
     }
 
     private var activeStore: VaultStore { demoState?.0 ?? store }
@@ -76,6 +77,8 @@ final class AppModel {
     /// the data key lives in the same namespace self-destruct wipes — and so
     /// an isolated (test) vault cannot reach the real one's biometric key.
     let biometricFactor: BiometricFactor
+    /// Sync only ever runs while unlocked — merging needs the data key.
+    let sync: SyncCoordinator
 
     /// Cached: the enrolment check touches the Keychain, and SwiftUI reads this
     /// from view bodies on every render.
@@ -492,11 +495,18 @@ final class AppModel {
         // Clear markers belonging to vaults that no longer exist.
         biometricFactor.pruneStrategyMarkers(keeping: unlocked.header.vaultID)
         reprovisionBiometricKeyIfEnabled()
-        becomeUnlocked(VaultSession(unlocked: unlocked, store: store, onPersist: { [weak self] written, session in
+        // Demo mode uses a throwaway store and must never reach iCloud.
+        let syncable = store === self.store
+        let session = VaultSession(unlocked: unlocked, store: store, onPersist: { [weak self] written, session in
             self?.anchors.pin(container: written)
             self?.refreshAttemptDisplay()
             self?.mirrorToCloudIfEnabled(written, settings: session.payload.settings)
-        }))
+        })
+        becomeUnlocked(session)
+        if syncable {
+            // Pull whatever the phone added while this Mac was locked.
+            Task { [weak self] in await self?.sync.syncIfEnabled(session: session) }
+        }
     }
 
     /// Counts a failed *password* attempt and fires self-destruct only when the

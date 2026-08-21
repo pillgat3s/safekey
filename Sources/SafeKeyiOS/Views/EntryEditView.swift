@@ -21,6 +21,7 @@ struct EntryEditView: View {
     @State private var derivedAddresses: [SolanaAddress.Candidate] = []
     @State private var derivationError: String?
     @State private var isDeriving = false
+    @State private var derivationPassphrase = ""
 
     private var wordCount: Int {
         secret.split(whereSeparator: \.isWhitespace).count
@@ -97,6 +98,10 @@ struct EntryEditView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                     if canDerive {
+                        SecureField("BIP-39 passphrase (optional)", text: $derivationPassphrase)
+                            .accessibilityIdentifier("entry.derivePassphrase")
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
                         Button {
                             derive()
                         } label: {
@@ -118,7 +123,7 @@ struct EntryEditView: View {
                                     .font(.caption.monospaced())
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                                Text(candidate.label)
+                                Text("\(candidate.label) · \(candidate.path)")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -131,7 +136,7 @@ struct EntryEditView: View {
                     Text("Public Address")
                 } footer: {
                     if canDerive {
-                        Text("Derived on this device — nothing is sent anywhere. Matching it against your wallet confirms the secret was recorded correctly.")
+                        Text("Derived on this device — nothing is sent anywhere. Match one against your wallet to confirm the secret was recorded correctly. If none match, your wallet most likely uses a BIP-39 passphrase; enter it above.")
                     }
                 }
 
@@ -231,7 +236,10 @@ struct EntryEditView: View {
         let entry = WalletEntry(name: "", chain: chain, kind: kind, secret: secret.trimmingCharacters(in: .whitespacesAndNewlines))
         Task {
             defer { isDeriving = false }
-            let result = await Task.detached { Result { try SolanaAddress.candidates(for: entry) } }.value
+            let passphrase = derivationPassphrase
+            let result = await Task.detached {
+                Result { try SolanaAddress.candidates(for: entry, passphrase: passphrase) }
+            }.value
             switch result {
             case .success(let candidates):
                 derivedAddresses = Array(candidates.prefix(6))

@@ -38,11 +38,18 @@ public enum SolanaAddress {
 
     // MARK: - Entry points
 
-    public static func candidates(for entry: WalletEntry, accounts: Int = 5) throws -> [Candidate] {
+    /// `passphrase` is BIP-39's optional "25th word". A wallet configured with
+    /// one derives entirely different addresses, which is the usual reason a
+    /// derived address looks wrong when the arithmetic is correct.
+    public static func candidates(
+        for entry: WalletEntry,
+        passphrase: String = "",
+        accounts: Int = 5
+    ) throws -> [Candidate] {
         guard entry.chain == .solana else { throw DerivationError.unsupportedChain }
         switch entry.kind {
         case .seedPhrase:
-            return try candidatesFromMnemonic(entry.secret, accounts: accounts)
+            return try candidatesFromMnemonic(entry.secret, passphrase: passphrase, accounts: accounts)
         case .privateKey:
             return [try candidateFromPrivateKey(entry.secret)]
         }
@@ -104,6 +111,16 @@ public enum SolanaAddress {
                 path: accountPath,
                 label: account == 0 ? "Solana CLI, Ledger (account 1)" : "Account \(account + 1), short path",
                 address: Base58.encode(try publicKey(fromSeed: derive(seed: seed, path: [44, 501, account]))),
+                isExact: false
+            ))
+        }
+
+        // Sollet and some older web wallets: m/501'/N'/0/0
+        for account in 0..<max(1, accounts) {
+            results.append(Candidate(
+                path: "m/501'/\(account)'/0/0",
+                label: account == 0 ? "Sollet, older web wallets" : "Sollet account \(account + 1)",
+                address: Base58.encode(try publicKey(fromSeed: derive(seed: seed, path: [501, account, 0, 0]))),
                 isExact: false
             ))
         }

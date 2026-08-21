@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var armConfirmationText = ""
     @State private var includeInCloudBackup = true
     @State private var showingDefaultChainPicker = false
+    @State private var showingRemoveSync = false
 
     var body: some View {
         NavigationStack {
@@ -78,6 +79,25 @@ struct SettingsView: View {
                     Text("Security")
                 } footer: {
                     Text("The vault locks whenever the app leaves the foreground.\n\nErase after failed attempts: that many wrong passwords in a row and SafeKey deletes the vault and every stored key — no undo, no recovery. A correct password resets the count. It protects a stolen phone, not a backup copy someone already took.")
+                }
+
+                Section {
+                    Toggle("Sync with iCloud", isOn: cloudSyncBinding)
+                    if session.settings.cloudSyncEnabled {
+                        LabeledContent("Status") {
+                            Text(syncStatusText).foregroundStyle(.secondary)
+                        }
+                        Button("Sync Now") {
+                            Task { await model.sync.syncIfEnabled(session: session) }
+                        }
+                        Button("Stop Syncing and Remove Copy", role: .destructive) {
+                            showingRemoveSync = true
+                        }
+                    }
+                } header: {
+                    Text("Sync")
+                } footer: {
+                    Text("Wallets are kept in step across your Apple devices through your own iCloud account. Each one is uploaded already encrypted with your master password — iCloud stores it but cannot read it. Wallets edited on two devices at once are both kept, never merged silently.")
                 }
 
                 Section {
@@ -145,6 +165,22 @@ struct SettingsView: View {
             .alert("Backup", isPresented: alertBinding(for: $infoMessage)) {
                 Button("OK", role: .cancel) {}
             } message: { Text(infoMessage ?? "") }
+            .confirmationDialog(
+                "Stop syncing and remove the iCloud copy?",
+                isPresented: $showingRemoveSync,
+                titleVisibility: .visible
+            ) {
+                Button("Remove from iCloud", role: .destructive) {
+                    Task {
+                        await model.sync.removeFromCloud(session: session)
+                        var settings = session.settings
+                        settings.cloudSyncEnabled = false
+                        session.updateSettings(settings)
+                    }
+                }
+            } message: {
+                Text("The wallets on this device are kept. Only the copy in iCloud is deleted, and your other devices stop receiving changes.")
+            }
             .alert("Arm self-destruct?", isPresented: $showingArmConfirmation) {
                 TextField("Type DELETE", text: $armConfirmationText)
                     .textInputAutocapitalization(.characters)
@@ -234,6 +270,32 @@ struct SettingsView: View {
         Binding(
             get: { session.header.selfDestruct.maxAttempts },
             set: { newValue in session.updateHeader { $0.selfDestruct.maxAttempts = newValue } }
+        )
+    }
+
+    private var syncStatusText: String {
+        switch model.sync.status {
+        case .off: "Off"
+        case .unavailable(let reason): reason
+        case .idle(let date):
+            date.map { "Synced \($0.formatted(date: .omitted, time: .shortened))" } ?? "Waiting"
+        case .syncing: "Syncing…"
+        case .failed(let reason): reason
+        case .differentVault: "iCloud holds a different vault"
+        }
+    }
+
+    private var cloudSyncBinding: Binding<Bool> {
+        Binding(
+            get: { session.settings.cloudSyncEnabled },
+            set: { enabled in
+                var settings = session.settings
+                settings.cloudSyncEnabled = enabled
+                session.updateSettings(settings)
+                if enabled {
+                    Task { await model.sync.syncIfEnabled(session: session) }
+                }
+            }
         )
     }
 

@@ -149,6 +149,14 @@ final class VaultSession {
         upsert(entry)
     }
 
+    /// Replaces the wallets with a merged set from sync and writes it out.
+    /// Separate from `upsert` because sync produces a whole payload at once,
+    /// and saving per wallet would rewrite the vault once per change.
+    func adoptSynced(_ merged: VaultPayload) {
+        unlocked.payload = merged
+        persist()
+    }
+
     func updateSettings(_ newSettings: VaultSettings) {
         unlocked.payload.settings = newSettings
         persist()

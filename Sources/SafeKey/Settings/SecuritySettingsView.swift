@@ -100,6 +100,32 @@ struct SecuritySettingsView: View {
             }
 
             Section {
+                Toggle("Sync with iCloud", isOn: cloudSyncBinding)
+                if session.settings.cloudSyncEnabled {
+                    LabeledContent("Status") {
+                        Text(syncStatusText).foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Button("Sync Now") {
+                            Task { await model.sync.syncIfEnabled(session: session) }
+                        }
+                        Button("Stop Syncing and Remove Copy") {
+                            Task {
+                                await model.sync.removeFromCloud(session: session)
+                                var settings = session.settings
+                                settings.cloudSyncEnabled = false
+                                session.updateSettings(settings)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Sync")
+            } footer: {
+                Text("Keeps wallets in step across your Apple devices through your own iCloud account. Each wallet is uploaded already encrypted with your master password — iCloud stores it but cannot read it. A wallet edited on two devices at once is kept twice rather than merged silently.")
+            }
+
+            Section {
                 if CloudBackupService.shared.isAvailable {
                     Toggle("Keep an encrypted copy in iCloud Drive", isOn: cloudBackupBinding)
                     if session.settings.cloudBackupEnabled {
@@ -284,6 +310,32 @@ struct SecuritySettingsView: View {
 
     private var restoreBinding: Binding<Bool> {
         Binding(get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } })
+    }
+
+    private var syncStatusText: String {
+        switch model.sync.status {
+        case .off: "Off"
+        case .unavailable(let reason): reason
+        case .idle(let date):
+            date.map { "Synced \($0.formatted(date: .omitted, time: .shortened))" } ?? "Waiting"
+        case .syncing: "Syncing…"
+        case .failed(let reason): reason
+        case .differentVault: "iCloud holds a different vault"
+        }
+    }
+
+    private var cloudSyncBinding: Binding<Bool> {
+        Binding(
+            get: { session.settings.cloudSyncEnabled },
+            set: { enabled in
+                var settings = session.settings
+                settings.cloudSyncEnabled = enabled
+                session.updateSettings(settings)
+                if enabled {
+                    Task { await model.sync.syncIfEnabled(session: session) }
+                }
+            }
+        )
     }
 
     private var cloudBackupBinding: Binding<Bool> {

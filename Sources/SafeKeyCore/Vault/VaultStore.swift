@@ -95,6 +95,31 @@ public actor VaultStore {
         try url.setResourceValues(values)
     }
 
+    nonisolated public var syncStateURL: URL {
+        directory.appendingPathComponent("sync.json")
+    }
+
+    /// Per-vault sync bookkeeping: the server change token and what each
+    /// wallet looked like when the server last agreed. Not secret — it holds
+    /// ids and dates, never a name or a key — but kept 0600 alongside the
+    /// vault regardless.
+    public func loadSyncState() -> Data? {
+        try? Data(contentsOf: syncStateURL)
+    }
+
+    public func saveSyncState(_ data: Data) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(to: syncStateURL, options: [.atomic])
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: syncStateURL.path
+        )
+    }
+
+    public func clearSyncState() {
+        try? FileManager.default.removeItem(at: syncStateURL)
+    }
+
     nonisolated public var rescueURL: URL {
         directory.appendingPathComponent(Self.vaultFileName + ".pre-restore")
     }

@@ -28,6 +28,9 @@ public struct VaultSettings: Codable, Sendable, Equatable {
     /// Order of the chain rows. Chains not listed keep their natural order
     /// after the ones that are.
     public var chainOrder: [Chain]
+    /// Sync wallets between this user's devices through their private CloudKit
+    /// database. Off unless asked for.
+    public var cloudSyncEnabled: Bool
     /// Direction for `sortOrder`. `nil` follows the field's natural direction,
     /// so switching to a date field reads newest-first without the user having
     /// to flip it back every time.
@@ -89,7 +92,8 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         homeTileOrder: [HomeTile] = [],
         hiddenHomeTiles: [HomeTile] = [],
         chainOrder: [Chain] = [],
-        sortDescending: Bool? = nil
+        sortDescending: Bool? = nil,
+        cloudSyncEnabled: Bool = false
     ) {
         self.autoLockSeconds = autoLockSeconds
         self.lockOnSleep = lockOnSleep
@@ -103,6 +107,7 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         self.hiddenHomeTiles = hiddenHomeTiles
         self.chainOrder = chainOrder
         self.sortDescending = sortDescending
+        self.cloudSyncEnabled = cloudSyncEnabled
     }
 
     /// Hand-written so settings added in a later version decode as their
@@ -123,6 +128,7 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         hiddenHomeTiles = try container.decodeIfPresent([HomeTile].self, forKey: .hiddenHomeTiles) ?? []
         chainOrder = try container.decodeIfPresent([Chain].self, forKey: .chainOrder) ?? []
         sortDescending = try container.decodeIfPresent(Bool.self, forKey: .sortDescending)
+        cloudSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .cloudSyncEnabled) ?? false
     }
 
     /// Whether the list currently reads high-to-low.

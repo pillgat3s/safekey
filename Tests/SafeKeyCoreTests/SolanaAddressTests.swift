@@ -155,4 +155,52 @@ final class SolanaAddressTests: XCTestCase {
             XCTAssertEqual($0 as? SolanaAddress.DerivationError, .unsupportedChain)
         }
     }
+    // MARK: - Published vectors
+
+    /// SLIP-0010's ed25519 vector 1. The existing tests prove derivation is
+    /// deterministic and that paths differ from each other; this proves the
+    /// numbers are the *right* ones, which self-consistency cannot.
+    func testSLIP10MatchesPublishedVector() throws {
+        let seed = Data([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+
+        let master = try SolanaAddress.derive(seed: seed, path: [])
+        XCTAssertEqual(
+            master.map { String(format: "%02x", $0) }.joined(),
+            "2b4be7f19ee27bbf30c667b642d5f4aa69fd169872f8fc3059c08ebae2eb19e7"
+        )
+        XCTAssertEqual(
+            try SolanaAddress.publicKey(fromSeed: master).map { String(format: "%02x", $0) }.joined(),
+            "a4b2856bfec510abab89753fac1ac0e1112364e7d250545963f135f2a33188ed"
+        )
+        XCTAssertEqual(
+            try SolanaAddress.derive(seed: seed, path: [0]).map { String(format: "%02x", $0) }.joined(),
+            "68e0fe46dfb67e368c75379acec591dad19df3cde26e63b93a8e704f1dade7a3"
+        )
+    }
+
+    /// The addresses this mnemonic must produce, cross-checked against an
+    /// independent implementation. A change that quietly alters a derived
+    /// address fails here rather than showing someone an address they do not
+    /// control.
+    func testDerivedAddressesForKnownMnemonic() throws {
+        let candidates = try SolanaAddress.candidatesFromMnemonic(testMnemonic, accounts: 1)
+        let byPath = Dictionary(uniqueKeysWithValues: candidates.map { ($0.path, $0.address) })
+
+        XCTAssertEqual(byPath["m/44'/501'/0'/0'"], "HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk")
+        XCTAssertEqual(byPath["m/44'/501'/0'"], "GjJyeC1r2RgkuoCWMyPYkCWSGSGLcz266EaAkLA27AhL")
+        XCTAssertEqual(byPath["seed"], "EHqmfkN89RJ7Y33CXM6uCzhVeuywHoJXZZLszBHHZy7o")
+    }
+
+    /// A passphrase changes every address, which is the usual reason a derived
+    /// address looks wrong when the arithmetic is right.
+    func testPassphraseChangesEveryAddress() throws {
+        let plain = try SolanaAddress.candidatesFromMnemonic(testMnemonic, accounts: 1)
+        let withPassphrase = try SolanaAddress.candidatesFromMnemonic(
+            testMnemonic, passphrase: "TREZOR", accounts: 1
+        )
+        for (a, b) in zip(plain, withPassphrase) {
+            XCTAssertEqual(a.path, b.path)
+            XCTAssertNotEqual(a.address, b.address, "\(a.path) should differ under a passphrase")
+        }
+    }
 }

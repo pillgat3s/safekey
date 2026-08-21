@@ -293,6 +293,9 @@ struct VaultHomeView: View {
             .sheet(isPresented: $showingAdd) {
                 EntryEditView(session: session, existing: nil)
             }
+            .onChange(of: session.entries.count) { _, _ in
+                Task { await model.sync.syncIfEnabled(session: session) }
+            }
             .sheet(isPresented: $showingSettings) {
                 SettingsView(session: session)
             }

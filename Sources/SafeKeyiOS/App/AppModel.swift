@@ -39,11 +39,14 @@ final class AppModel {
     /// the data key lives in the same namespace self-destruct wipes — and so
     /// an isolated (test) vault cannot reach the real one's biometric key.
     let biometricFactor: BiometricFactor
+    /// Sync only ever runs while unlocked — merging needs the data key.
+    let sync: SyncCoordinator
 
     init(store: VaultStore = VaultStore(), keychain: KeychainService = KeychainService()) {
         self.store = store
         self.keychain = keychain
         self.biometricFactor = BiometricFactor(service: keychain.service)
+        self.sync = SyncCoordinator(store: store)
     }
 
     /// The model the app scene should use.
@@ -280,9 +283,12 @@ final class AppModel {
         biometricFactor.pruneStrategyMarkers(keeping: unlocked.header.vaultID)
         Task { await store.clearRescueCopy() }
         reprovisionBiometricKeyIfEnabled(unlocked)
-        state = .unlocked(VaultSession(unlocked: unlocked, store: store, onPersist: { [weak self] written, _ in
+        let session = VaultSession(unlocked: unlocked, store: store, onPersist: { [weak self] written, _ in
             self?.anchors.pin(container: written)
-        }))
+        })
+        state = .unlocked(session)
+        // Pull anything the other device added while this one was locked.
+        Task { [weak self] in await self?.sync.syncIfEnabled(session: session) }
     }
 
     /// Rewrites the biometric key on each unlock so its Keychain protection
