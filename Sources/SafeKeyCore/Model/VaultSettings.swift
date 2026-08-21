@@ -28,6 +28,10 @@ public struct VaultSettings: Codable, Sendable, Equatable {
     /// Order of the chain rows. Chains not listed keep their natural order
     /// after the ones that are.
     public var chainOrder: [Chain]
+    /// Direction for `sortOrder`. `nil` follows the field's natural direction,
+    /// so switching to a date field reads newest-first without the user having
+    /// to flip it back every time.
+    public var sortDescending: Bool?
 
     /// The fixed categories on the home screen.
     public enum HomeTile: String, Codable, Sendable, Equatable, CaseIterable {
@@ -42,8 +46,35 @@ public struct VaultSettings: Codable, Sendable, Equatable {
 
     public enum SortOrder: String, Codable, Sendable, Equatable, CaseIterable {
         case dateModified
+        case dateCreated
         case name
         case chain
+
+        public var label: String {
+            switch self {
+            case .dateModified: "Date Edited"
+            case .dateCreated: "Date Created"
+            case .name: "Name"
+            case .chain: "Chain"
+            }
+        }
+
+        public var symbol: String {
+            switch self {
+            case .dateModified: "pencil"
+            case .dateCreated: "plus.circle"
+            case .name: "textformat"
+            case .chain: "link"
+            }
+        }
+
+        /// Dates read newest-first by default; names and chains read A→Z.
+        public var defaultsToDescending: Bool {
+            switch self {
+            case .dateModified, .dateCreated: true
+            case .name, .chain: false
+            }
+        }
     }
 
     public init(
@@ -57,7 +88,8 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         cloudBackupEnabled: Bool = false,
         homeTileOrder: [HomeTile] = [],
         hiddenHomeTiles: [HomeTile] = [],
-        chainOrder: [Chain] = []
+        chainOrder: [Chain] = [],
+        sortDescending: Bool? = nil
     ) {
         self.autoLockSeconds = autoLockSeconds
         self.lockOnSleep = lockOnSleep
@@ -70,6 +102,7 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         self.homeTileOrder = homeTileOrder
         self.hiddenHomeTiles = hiddenHomeTiles
         self.chainOrder = chainOrder
+        self.sortDescending = sortDescending
     }
 
     /// Hand-written so settings added in a later version decode as their
@@ -89,6 +122,12 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         homeTileOrder = try container.decodeIfPresent([HomeTile].self, forKey: .homeTileOrder) ?? []
         hiddenHomeTiles = try container.decodeIfPresent([HomeTile].self, forKey: .hiddenHomeTiles) ?? []
         chainOrder = try container.decodeIfPresent([Chain].self, forKey: .chainOrder) ?? []
+        sortDescending = try container.decodeIfPresent(Bool.self, forKey: .sortDescending)
+    }
+
+    /// Whether the list currently reads high-to-low.
+    public var effectiveSortDescending: Bool {
+        sortDescending ?? sortOrder.defaultsToDescending
     }
 
     /// Applies the stored order to a set of items, keeping anything unlisted in

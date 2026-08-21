@@ -23,4 +23,12 @@ public enum SecretKind: Codable, Sendable, Equatable, Hashable {
         if case .seedPhrase = self { return true }
         return false
     }
+
+    /// The lengths BIP-39 defines. Anything else is not necessarily wrong —
+    /// the user may still be typing — but it is worth flagging quietly.
+    public static let validWordCounts = [12, 15, 18, 21, 24]
+
+    public static func isPlausibleWordCount(_ count: Int) -> Bool {
+        validWordCounts.contains(count)
+    }
 }

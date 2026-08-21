@@ -23,21 +23,21 @@ struct EntryListView: View {
                     || ($0.publicAddress ?? "").localizedCaseInsensitiveContains(searchText)
             }
         }
-        switch session.settings.sortOrder {
-        case .dateModified: entries.sort { $0.modifiedAt > $1.modifiedAt }
-        case .name: entries.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        case .chain: entries.sort { $0.chain.displayName < $1.chain.displayName }
-        }
-        return entries
+        return session.settings.sorted(entries)
     }
 
     private var buckets: [(String, [WalletEntry])] {
-        guard session.settings.sortOrder == .dateModified else {
+        // Only a date sort has meaningful buckets; by name or chain the
+        // headings would be arbitrary.
+        guard session.settings.sortOrder == .dateModified
+                || session.settings.sortOrder == .dateCreated
+        else {
             return [("", filtered)]
         }
         var grouped: [(String, [WalletEntry])] = []
         for entry in filtered {
-            let bucket = DateBucket.label(for: entry.modifiedAt)
+            guard let date = session.settings.bucketDate(for: entry) else { continue }
+            let bucket = DateBucket.label(for: date)
             if let last = grouped.indices.last, grouped[last].0 == bucket {
                 grouped[last].1.append(entry)
             } else {
@@ -112,6 +112,9 @@ struct EntryListView: View {
         .searchable(text: $searchText, placement: .toolbar, prompt: "Search")
         .searchFocused($searchFocused)
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                SortMenu(session: session)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showingAdd = true

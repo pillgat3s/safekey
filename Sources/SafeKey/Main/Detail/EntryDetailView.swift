@@ -1,35 +1,29 @@
 import SwiftUI
 import SafeKeyCore
 
+/// A wallet's own screen, laid out the same way as the iPhone: the mark and
+/// name centred above the facts, so both apps read as one product.
 struct EntryDetailView: View {
     let session: VaultSession
     let entry: WalletEntry
     @State private var isEditing = false
+    @State private var creatingGroup = false
+    @State private var newGroupName = ""
 
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 14) {
-                    ChainLogo(chain: entry.chain, size: 48)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.name)
-                            .font(.title2.bold())
-                        Text("\(entry.chain.displayName) · \(entry.kind.displayName)")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button {
-                        session.toggleFavorite(id: entry.id)
-                    } label: {
-                        Image(systemName: entry.favorite ? "star.fill" : "star")
-                            .font(.title3)
-                            .foregroundStyle(entry.favorite ? .yellow : .secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .help(entry.favorite ? "Remove from Favorites" : "Add to Favorites")
+                VStack(spacing: 10) {
+                    ChainLogo(chain: entry.chain, size: 72)
+                    Text(entry.name)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+                    Text("\(entry.chain.displayName) · \(entry.kind.displayName)")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
             }
@@ -38,8 +32,8 @@ struct EntryDetailView: View {
                 SecretRevealRow(entry: entry, session: session)
             }
 
-            if let address = entry.publicAddress, !address.isEmpty {
-                Section {
+            Section {
+                if let address = entry.publicAddress, !address.isEmpty {
                     LabeledContent("Public Address") {
                         HStack(spacing: 8) {
                             Text(address)
@@ -58,6 +52,40 @@ struct EntryDetailView: View {
                         }
                     }
                 }
+
+                LabeledContent("Chain", value: entry.chain.displayName)
+
+                // Moving a wallet between groups from its own screen, the way
+                // the iPhone offers it.
+                Picker("Group", selection: groupBinding) {
+                    Text("None").tag(UUID?.none)
+                    ForEach(session.groups(for: entry.chain)) { group in
+                        Text(group.name).tag(UUID?.some(group.id))
+                    }
+                }
+
+                Button("New Group…") {
+                    newGroupName = ""
+                    creatingGroup = true
+                }
+
+                LabeledContent("Favorite") {
+                    Toggle("", isOn: favoriteBinding)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
+
+                if !entry.tags.isEmpty {
+                    LabeledContent("Tags") {
+                        Text(entry.tags.joined(separator: ", "))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                LabeledContent(
+                    "Modified",
+                    value: entry.modifiedAt.formatted(date: .abbreviated, time: .omitted)
+                )
             }
 
             if !entry.notes.isEmpty {
@@ -65,30 +93,6 @@ struct EntryDetailView: View {
                     Text(entry.notes)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
-
-            if !entry.tags.isEmpty {
-                Section("Tags") {
-                    HStack(spacing: 6) {
-                        ForEach(entry.tags, id: \.self) { tag in
-                            Text(tag)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(.quaternary.opacity(0.6), in: Capsule())
-                        }
-                    }
-                }
-            }
-
-            Section {
-            } footer: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Created \(entry.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                    Text("Modified \(entry.modifiedAt.formatted(date: .abbreviated, time: .shortened))")
-                }
-                .font(.caption)
-                .foregroundStyle(.tertiary)
             }
         }
         .formStyle(.grouped)
@@ -100,5 +104,34 @@ struct EntryDetailView: View {
         .sheet(isPresented: $isEditing) {
             EntryEditView(session: session, existing: entry)
         }
+        .alert("New Group", isPresented: $creatingGroup) {
+            TextField("Group name", text: $newGroupName)
+            Button("Cancel", role: .cancel) { newGroupName = "" }
+            Button("Create") { createGroup() }
+        } message: {
+            Text("Groups organise wallets within \(entry.chain.displayName).")
+        }
+    }
+
+    private var groupBinding: Binding<UUID?> {
+        Binding(
+            get: { entry.groupID },
+            set: { session.move(entryID: entry.id, toGroup: $0) }
+        )
+    }
+
+    private var favoriteBinding: Binding<Bool> {
+        Binding(
+            get: { entry.favorite },
+            set: { _ in session.toggleFavorite(id: entry.id) }
+        )
+    }
+
+    private func createGroup() {
+        let name = newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newGroupName = ""
+        guard !name.isEmpty else { return }
+        let group = session.addGroup(name: name, chain: entry.chain, colorHex: nil)
+        session.move(entryID: entry.id, toGroup: group.id)
     }
 }

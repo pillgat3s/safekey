@@ -10,7 +10,7 @@ struct EntryEditView: View {
     @State private var name = ""
     @State private var chain: Chain = .evm
     @State private var showingChainPicker = false
-    @State private var kindSelection: KindSelection = .seed12
+    @State private var kindSelection: KindSelection = .seedPhrase
     @State private var secret = ""
     @State private var publicAddress = ""
     @State private var notes = ""
@@ -43,14 +43,16 @@ struct EntryEditView: View {
         tagsText = tags.joined(separator: ", ")
     }
 
+    /// One seed-phrase option rather than a 12- and a 24-word one: the length
+    /// is a property of what was pasted, not a choice to make beforehand, and
+    /// offering both invited picking the wrong one.
     enum KindSelection: String, CaseIterable, Identifiable {
-        case seed12, seed24, privateKey
+        case seedPhrase, privateKey
         var id: String { rawValue }
 
         var label: String {
             switch self {
-            case .seed12: "12-Word Seed Phrase"
-            case .seed24: "24-Word Seed Phrase"
+            case .seedPhrase: "Seed Phrase"
             case .privateKey: "Private Key"
             }
         }
@@ -60,10 +62,6 @@ struct EntryEditView: View {
 
     private var seedWordCount: Int {
         secret.split(whereSeparator: \.isWhitespace).count
-    }
-
-    private var expectedWordCount: Int {
-        kindSelection == .seed12 ? 12 : 24
     }
 
     /// A recognisable example for the selected chain, so the field reads as an
@@ -125,8 +123,11 @@ struct EntryEditView: View {
                     Text(isSeed ? "Seed Phrase" : "Private Key")
                 } footer: {
                     if isSeed {
-                        Text("\(seedWordCount) of \(expectedWordCount) words")
-                            .foregroundStyle(seedWordCount == expectedWordCount ? Color.secondary : .orange)
+                        // Flagged only at the lengths BIP-39 actually defines,
+                        // so an in-progress paste is not scolded for being
+                        // halfway typed.
+                        Text("\(seedWordCount) words")
+                            .foregroundStyle(SecretKind.isPlausibleWordCount(seedWordCount) ? Color.secondary : .orange)
                     }
                 }
 
@@ -255,7 +256,7 @@ struct EntryEditView: View {
         chain = existing.chain
         switch existing.kind {
         case .privateKey: kindSelection = .privateKey
-        case .seedPhrase(let count): kindSelection = count > 12 ? .seed24 : .seed12
+        case .seedPhrase: kindSelection = .seedPhrase
         }
     }
 

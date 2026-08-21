@@ -82,6 +82,11 @@ struct EntryEditView: View {
                 } footer: {
                     if isSeedPhrase {
                         Text("\(wordCount) words")
+                            .foregroundStyle(
+                                SecretKind.isPlausibleWordCount(wordCount)
+                                    ? AnyShapeStyle(.secondary)
+                                    : AnyShapeStyle(Color.orange)
+                            )
                     }
                 }
 

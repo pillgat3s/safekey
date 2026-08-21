@@ -28,7 +28,16 @@ private struct DateBucket: Identifiable {
     let entries: [WalletEntry]
     var id: String { title }
 
-    static func bucket(_ entries: [WalletEntry], calendar: Calendar = .current) -> [DateBucket] {
+    /// Buckets only make sense for a date sort; by name or chain the list is
+    /// returned whole under no heading.
+    static func bucket(
+        _ entries: [WalletEntry],
+        using settings: VaultSettings,
+        calendar: Calendar = .current
+    ) -> [DateBucket] {
+        guard settings.sortOrder == .dateModified || settings.sortOrder == .dateCreated else {
+            return [DateBucket(title: "", entries: entries)]
+        }
         let now = Date()
         var today: [WalletEntry] = []
         var thisWeek: [WalletEntry] = []
@@ -36,8 +45,9 @@ private struct DateBucket: Identifiable {
         var earlier: [WalletEntry] = []
 
         for entry in entries {
-            let days = calendar.dateComponents([.day], from: entry.modifiedAt, to: now).day ?? 0
-            if calendar.isDateInToday(entry.modifiedAt) {
+            let date = settings.bucketDate(for: entry) ?? entry.modifiedAt
+            let days = calendar.dateComponents([.day], from: date, to: now).day ?? 0
+            if calendar.isDateInToday(date) {
                 today.append(entry)
             } else if days < 7 {
                 thisWeek.append(entry)
@@ -76,7 +86,7 @@ struct EntryListView: View {
                     || ($0.publicAddress ?? "").localizedCaseInsensitiveContains(searchText)
             }
         }
-        return entries.sorted { $0.modifiedAt > $1.modifiedAt }
+        return session.settings.sorted(entries)
     }
 
     var body: some View {
@@ -93,7 +103,7 @@ struct EntryListView: View {
                 }
             } else {
                 List {
-                    ForEach(DateBucket.bucket(filtered)) { bucket in
+                    ForEach(DateBucket.bucket(filtered, using: session.settings)) { bucket in
                         Section {
                             ForEach(bucket.entries) { entry in
                                 row(for: entry)
@@ -114,6 +124,9 @@ struct EntryListView: View {
         .toolbar {
             // Title with the item count beneath it, the way a credential list
             // tells you how much is in the category you opened.
+            ToolbarItem(placement: .topBarTrailing) {
+                SortMenu(session: session)
+            }
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
                     Text(title)
