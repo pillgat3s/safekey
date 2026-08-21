@@ -9,6 +9,8 @@ struct EntryDetailView: View {
     @State private var revealed = false
     @State private var isEditing = false
     @State private var notice: String?
+    @State private var creatingGroup = false
+    @State private var newGroupName = ""
 
     private var entry: WalletEntry? { session.entry(id: entryID) }
 
@@ -16,100 +18,134 @@ struct EntryDetailView: View {
         Group {
             if let entry {
                 List {
+                    // Centred mark and name, then the facts as a grouped card —
+                    // the shape iOS uses for a single credential.
                     Section {
-                        HStack(spacing: 14) {
-                            ChainLogo(chain: entry.chain, size: 48)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(entry.name).font(.title3.bold())
-                                Text("\(entry.chain.displayName) · \(entry.kind.displayName)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button {
-                                session.toggleFavorite(id: entry.id)
-                            } label: {
-                                Image(systemName: entry.favorite ? "star.fill" : "star")
-                                    .foregroundStyle(entry.favorite ? .yellow : .secondary)
-                            }
-                            .buttonStyle(.plain)
+                        VStack(spacing: 12) {
+                            ChainLogo(chain: entry.chain, size: 88)
+                            Text(entry.name)
+                                .font(.title.bold())
+                                .multilineTextAlignment(.center)
                         }
-                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
 
+                    // Tapping the secret opens a menu with copy and reveal,
+                    // rather than parking two buttons under the value.
                     Section(entry.kind.shortName) {
-                        if revealed {
-                            if entry.kind.isSeedPhrase {
-                                SeedPhraseGrid(phrase: entry.secret)
-                            } else {
-                                Text(entry.secret)
-                                    .font(.callout.monospaced())
-                                    .textSelection(.enabled)
+                        Menu {
+                            Button {
+                                copy(entry.secret, label: "\(entry.kind.shortName) copied")
+                            } label: {
+                                Label("Copy \(entry.kind.shortName)", systemImage: "doc.on.doc")
                             }
-                        } else {
-                            Text(String(repeating: "•", count: 24))
-                                .font(.callout.monospaced())
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Button {
-                            toggleReveal(entry)
+                            Button {
+                                toggleReveal(entry)
+                            } label: {
+                                Label(revealed ? "Hide" : "Reveal", systemImage: revealed ? "eye.slash" : "eye")
+                            }
                         } label: {
-                            Label(revealed ? "Hide" : "Reveal", systemImage: revealed ? "eye.slash" : "eye")
+                            secretValue(for: entry)
                         }
+                        .accessibilityIdentifier("detail.secretRow")
 
-                        Button {
-                            copy(entry.secret, label: "Secret copied")
-                        } label: {
-                            Label("Copy", systemImage: "doc.on.doc")
+                        if revealed, entry.kind.isSeedPhrase {
+                            SeedPhraseGrid(phrase: entry.secret)
                         }
                     }
 
-                    if let address = entry.publicAddress, !address.isEmpty {
-                        Section("Public Address") {
-                            Text(address)
-                                .font(.callout.monospaced())
-                                .textSelection(.enabled)
-                            Button {
-                                copy(address, label: "Address copied")
+                    Section {
+                        if let address = entry.publicAddress, !address.isEmpty {
+                            Menu {
+                                Button {
+                                    copy(address, label: "Address copied")
+                                } label: {
+                                    Label("Copy Address", systemImage: "doc.on.doc")
+                                }
                             } label: {
-                                Label("Copy Address", systemImage: "doc.on.doc")
+                                LabeledContent("Address") {
+                                    Text(address)
+                                        .font(.callout.monospaced())
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
                             }
                         }
+
+                        LabeledContent("Chain", value: entry.chain.displayName)
+
+                        // The group is chosen here, the way iOS lets you move a
+                        // credential between groups from its own screen.
+                        Menu {
+                            Picker("Group", selection: groupBinding(for: entry)) {
+                                Text("None").tag(UUID?.none)
+                                ForEach(session.groups(for: entry.chain)) { group in
+                                    Text(group.name).tag(UUID?.some(group.id))
+                                }
+                            }
+                            Divider()
+                            Button {
+                                newGroupName = ""
+                                creatingGroup = true
+                            } label: {
+                                Label("New Group…", systemImage: "plus.circle")
+                            }
+                        } label: {
+                            LabeledContent("Group") {
+                                HStack(spacing: 4) {
+                                    Text(session.group(id: entry.groupID)?.name ?? "None")
+                                    Image(systemName: "chevron.up.chevron.down")
+                                        .font(.caption2)
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("detail.groupRow")
+
+                        if !entry.tags.isEmpty {
+                            LabeledContent("Tags", value: entry.tags.joined(separator: ", "))
+                        }
+
+                        LabeledContent(
+                            "Modified",
+                            value: entry.modifiedAt.formatted(date: .abbreviated, time: .omitted)
+                        )
                     }
 
                     if !entry.notes.isEmpty {
                         Section("Notes") { Text(entry.notes) }
                     }
-
-                    if let group = session.group(id: entry.groupID) {
-                        Section("Group") {
-                            LabeledContent(group.name, value: group.chain.displayName)
-                        }
-                    }
-
-                    if !entry.tags.isEmpty {
-                        Section("Tags") {
-                            Text(entry.tags.joined(separator: ", "))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Section {
-                        Text("Modified \(entry.modifiedAt.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
                 }
-                .navigationTitle(entry.name)
+                .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    // Share offers the public address only. A share sheet is a
+                    // route to any app on the phone, and a seed phrase that
+                    // leaves through it is unrecoverable — so the secret is
+                    // reachable by Copy, which is deliberate and local, and
+                    // never by Share.
+                    if let address = entry.publicAddress, !address.isEmpty {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            ShareLink(item: address) {
+                                Label("Share Address", systemImage: "square.and.arrow.up")
+                            }
+                        }
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Edit") { isEditing = true }
                     }
                 }
                 .sheet(isPresented: $isEditing) {
                     EntryEditView(session: session, existing: entry)
+                }
+                .alert("New Group", isPresented: $creatingGroup) {
+                    TextField("Group name", text: $newGroupName)
+                    Button("Cancel", role: .cancel) { newGroupName = "" }
+                    Button("Create") { createGroup(for: entry) }
+                } message: {
+                    Text("Groups organise wallets within \(entry.chain.displayName).")
                 }
                 .overlay(alignment: .bottom) {
                     if let notice {
@@ -127,6 +163,41 @@ struct EntryDetailView: View {
                 ContentUnavailableView("Wallet Deleted", systemImage: "trash")
             }
         }
+    }
+
+    /// Dots until revealed; the value itself once it is.
+    @ViewBuilder
+    private func secretValue(for entry: WalletEntry) -> some View {
+        if revealed, !entry.kind.isSeedPhrase {
+            Text(entry.secret)
+                .font(.callout.monospaced())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("detail.secret")
+        } else if revealed {
+            Text("Tap to hide")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(String(repeating: "•", count: 16))
+                .font(.callout.monospaced())
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func groupBinding(for entry: WalletEntry) -> Binding<UUID?> {
+        Binding(
+            get: { entry.groupID },
+            set: { session.move(entryID: entry.id, toGroup: $0) }
+        )
+    }
+
+    private func createGroup(for entry: WalletEntry) {
+        let name = newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newGroupName = ""
+        guard !name.isEmpty else { return }
+        let group = session.addGroup(name: name, chain: entry.chain, colorHex: nil)
+        session.move(entryID: entry.id, toGroup: group.id)
     }
 
     private func toggleReveal(_ entry: WalletEntry) {

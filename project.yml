@@ -3,7 +3,10 @@ options:
   bundleIdPrefix: com.andri
   deploymentTarget:
     macOS: "26.0"
-    iOS: "18.0"
+    # iOS 26 for the same reason the Mac app targets macOS 26: the app is built
+    # in that release's design language — the floating bottom search bar and
+    # toolbar spacers among them — and back-porting it would mean two layouts.
+    iOS: "26.0"
   createIntermediateGroups: true
 settings:
   base:

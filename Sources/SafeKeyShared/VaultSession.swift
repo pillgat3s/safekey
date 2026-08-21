@@ -17,6 +17,9 @@ final class VaultSession {
     private let onPersist: (Data, Vault.Unlocked) -> Void
     /// Surfaced in an alert when a background save fails; nil otherwise.
     var saveError: String?
+    /// Set when this session came from creating the vault, so first-run offers
+    /// (biometric unlock) can be made once rather than on every unlock.
+    var isNewlyCreated = false
 
     init(
         unlocked: Vault.Unlocked,
@@ -77,11 +80,12 @@ final class VaultSession {
     }
 
     @discardableResult
-    func addGroup(name: String, chain: Chain, colorHex: String?) -> WalletGroup {
+    func addGroup(name: String, chain: Chain, colorHex: String?, icon: String? = nil) -> WalletGroup {
         let group = WalletGroup(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             chain: chain,
             colorHex: colorHex,
+            icon: icon,
             sortIndex: (unlocked.payload.groups.filter { $0.chain == chain }.map(\.sortIndex).max() ?? -1) + 1
         )
         unlocked.payload.groups.append(group)

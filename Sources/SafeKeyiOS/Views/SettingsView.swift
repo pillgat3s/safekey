@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var showingArmConfirmation = false
     @State private var armConfirmationText = ""
     @State private var includeInCloudBackup = true
+    @State private var showingDefaultChainPicker = false
 
     var body: some View {
         NavigationStack {
@@ -33,6 +34,24 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button {
+                        showingDefaultChainPicker = true
+                    } label: {
+                        HStack {
+                            Text("Default chain").foregroundStyle(.primary)
+                            Spacer()
+                            ChainLogo(chain: session.settings.defaultChain, size: 22)
+                            Text(session.settings.defaultChain.displayName)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("New Wallets")
+                } footer: {
+                    Text("Preselected when you add a wallet. You can still change it per wallet.")
+                }
+
+                Section {
                     Picker("Ask before revealing", selection: revealPolicyBinding) {
                         Text("Never").tag(RevealChoice.never)
                         Text("Every time").tag(RevealChoice.everyTime)
@@ -44,29 +63,9 @@ struct SettingsView: View {
                         Text("2 minutes").tag(120 as Int?)
                         Text("Never").tag(nil as Int?)
                     }
-                } header: {
-                    Text("Secrets")
-                } footer: {
-                    Text("The vault locks automatically whenever the app leaves the foreground.")
-                }
-
-                Section {
-                    NavigationLink("Groups") {
-                        GroupsView(session: session)
-                    }
-                } header: {
-                    Text("Organising")
-                }
-
-                Section {
                     NavigationLink("Change Master Password") {
                         ChangePasswordView(session: session)
                     }
-                } header: {
-                    Text("Master Password")
-                }
-
-                Section {
                     Toggle("Erase after failed attempts", isOn: selfDestructBinding)
                     if session.header.selfDestruct.enabled {
                         Stepper(
@@ -76,9 +75,9 @@ struct SettingsView: View {
                         )
                     }
                 } header: {
-                    Text("Self-Destruct")
+                    Text("Security")
                 } footer: {
-                    Text("After this many wrong passwords in a row, SafeKey deletes the vault and every stored key — there is no undo and no recovery. A correct password resets the count. This protects a stolen phone; it does not protect a backup copy someone already took, so keep your backup somewhere you trust.")
+                    Text("The vault locks whenever the app leaves the foreground.\n\nErase after failed attempts: that many wrong passwords in a row and SafeKey deletes the vault and every stored key — no undo, no recovery. A correct password resets the count. It protects a stolen phone, not a backup copy someone already took.")
                 }
 
                 Section {
@@ -98,7 +97,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Backup")
                 } footer: {
-                    Text("Saving to Files lets you keep a copy in iCloud Drive or send it to yourself. It is the same encrypted file — safe to store anywhere, useless to anyone without your master password.")
+                    Text("Export a copy to keep somewhere else — iCloud Drive, another device, wherever you like. It is encrypted with your master password, so the copy is useless to anyone who does not have it.")
                 }
 
                 Section {
@@ -118,6 +117,9 @@ struct SettingsView: View {
             .task {
                 biometricsEnabled = model.biometricFactor.isEnrolled(vaultID: session.header.vaultID)
                 includeInCloudBackup = await !model.store.isExcludedFromBackup()
+            }
+            .sheet(isPresented: $showingDefaultChainPicker) {
+                ChainPickerView(selection: defaultChainBinding)
             }
             .fileExporter(
                 isPresented: $showingExporter,
@@ -232,6 +234,17 @@ struct SettingsView: View {
         Binding(
             get: { session.header.selfDestruct.maxAttempts },
             set: { newValue in session.updateHeader { $0.selfDestruct.maxAttempts = newValue } }
+        )
+    }
+
+    private var defaultChainBinding: Binding<Chain> {
+        Binding(
+            get: { session.settings.defaultChain },
+            set: { newValue in
+                var settings = session.settings
+                settings.defaultChain = newValue
+                session.updateSettings(settings)
+            }
         )
     }
 

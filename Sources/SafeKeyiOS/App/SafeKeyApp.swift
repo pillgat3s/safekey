@@ -46,7 +46,7 @@ struct RootView: View {
         case .locked:
             LockScreenView()
         case .unlocked(let session):
-            VaultListView(session: session)
+            VaultHomeView(session: session)
         }
     }
 }

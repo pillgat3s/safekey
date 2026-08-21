@@ -22,6 +22,19 @@ final class ScreenshotTourUITests: XCTestCase {
         try? FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
     }
 
+    /// First run opens on the welcome screen now.
+    private func dismissWelcome() {
+        let cont = app.buttons["welcome.continue"]
+        if cont.waitForExistence(timeout: 15) { cont.tap() }
+    }
+
+    /// A freshly created vault now offers biometric unlock. Tests that are not
+    /// about biometrics decline it, so the alert does not sit over the UI.
+    private func declineBiometricOffer() {
+        let notNow = app.alerts.buttons["Not Now"]
+        if notNow.waitForExistence(timeout: 5) { notNow.tap() }
+    }
+
     override func tearDown() {
         app?.terminate()
         super.tearDown()
@@ -41,7 +54,10 @@ final class ScreenshotTourUITests: XCTestCase {
         app.launchArguments = ["--uitest", "--uitest-reset"]
         app.launch()
 
-        // 1. Onboarding
+        // 1. Welcome, then onboarding
+        XCTAssertTrue(app.buttons["welcome.continue"].waitForExistence(timeout: timeout))
+        capture("00-welcome")
+        dismissWelcome()
         let password = app.secureTextFields["onboarding.password"]
         XCTAssertTrue(password.waitForExistence(timeout: timeout))
         capture("01-onboarding-empty")
@@ -55,6 +71,7 @@ final class ScreenshotTourUITests: XCTestCase {
 
         app.buttons["Create Vault"].tap()
         XCTAssertTrue(app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout))
+        declineBiometricOffer()
         capture("03-empty-vault")
 
         // 2. Add a seed phrase and a private key
@@ -66,21 +83,30 @@ final class ScreenshotTourUITests: XCTestCase {
                 + "account accuse achieve acid acoustic acquire across act action actor actress actual",
             seedPhrase: true
         )
-        XCTAssertTrue(app.staticTexts["Ledger Nano X — Long Term Cold Storage"].waitForExistence(timeout: timeout))
         addEntry(name: "Hot Wallet", secret: "0x4c0883a69102937d6231471b5dbb6204fe512961708279fe6f39a1c9a3f0dd4e")
-        XCTAssertTrue(app.staticTexts["Hot Wallet"].waitForExistence(timeout: timeout))
-        capture("04-wallet-list")
+        capture("04-home-with-wallets")
 
-        // 3. Detail, masked then revealed
+        // 3. The list one level down
+        let tile = app.buttons["tile.All"]
+        XCTAssertTrue(tile.waitForExistence(timeout: timeout))
+        tile.tap()
+        XCTAssertTrue(app.staticTexts["Hot Wallet"].waitForExistence(timeout: timeout))
+        capture("04b-wallet-list")
+
+        // 4. Detail, masked then revealed
         app.staticTexts["Ledger Nano X — Long Term Cold Storage"].tap()
-        XCTAssertTrue(app.buttons["Reveal"].waitForExistence(timeout: timeout))
+        let secretRow = app.buttons["detail.secretRow"]
+        XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
         capture("05-detail-masked")
+        secretRow.tap()
         app.buttons["Reveal"].tap()
         XCTAssertTrue(app.staticTexts["abandon"].waitForExistence(timeout: timeout))
         capture("06-detail-revealed")
         app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["Hot Wallet"].waitForExistence(timeout: timeout))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
 
-        // 4. Settings
+        // 5. Settings
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: timeout))
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: timeout))
@@ -108,9 +134,11 @@ final class ScreenshotTourUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: timeout))
         app.buttons["Done"].tap()
 
-        // 5. Lock screen
-        XCTAssertTrue(app.buttons["Lock"].waitForExistence(timeout: timeout))
-        app.buttons["Lock"].tap()
+        // 6. Lock screen
+        // The vault locks by leaving the foreground; there is no manual lock.
+        XCUIDevice.shared.press(.home)
+        _ = app.wait(for: .runningBackground, timeout: 15)
+        app.activate()
         XCTAssertTrue(app.secureTextFields["lock.password"].waitForExistence(timeout: timeout))
         capture("09-lock-screen")
     }

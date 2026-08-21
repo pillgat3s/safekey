@@ -20,6 +20,25 @@ final class BiometricUnlockUITests: XCTestCase {
         app = XCUIApplication()
     }
 
+    /// First run opens on the welcome screen now.
+    private func dismissWelcome() {
+        let cont = app.buttons["welcome.continue"]
+        if cont.waitForExistence(timeout: 15) { cont.tap() }
+    }
+
+    /// Backgrounds the app and comes back, which is how the vault locks now
+    /// that there is no manual lock button — so this exercises the real
+    /// mechanism rather than a button that only existed for the tests.
+    private func lockVault() {
+        XCUIDevice.shared.press(.home)
+        _ = app.wait(for: .runningBackground, timeout: 15)
+        app.activate()
+        XCTAssertTrue(
+            app.secureTextFields["lock.password"].waitForExistence(timeout: timeout),
+            "leaving the foreground should have locked the vault"
+        )
+    }
+
     override func tearDown() {
         app?.terminate()
         super.tearDown()
@@ -30,6 +49,7 @@ final class BiometricUnlockUITests: XCTestCase {
         app.launch()
 
         // Onboarding
+        dismissWelcome()
         let password = app.secureTextFields["onboarding.password"]
         XCTAssertTrue(password.waitForExistence(timeout: timeout))
         password.tap()
@@ -72,7 +92,7 @@ final class BiometricUnlockUITests: XCTestCase {
         )
 
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["Lock"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: timeout))
 
         // Relaunch rather than tapping Lock. A fresh launch with a vault on disk
         // always comes up locked, so reaching the wallet list from here — with
@@ -91,7 +111,7 @@ final class BiometricUnlockUITests: XCTestCase {
         }
 
         XCTAssertTrue(
-            app.navigationBars["All Wallets"].waitForExistence(timeout: timeout),
+            app.navigationBars["SafeKey"].waitForExistence(timeout: timeout),
             "biometric unlock did not open the vault"
         )
         captureScreen("bio-04-unlocked")

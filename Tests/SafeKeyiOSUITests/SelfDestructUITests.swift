@@ -17,12 +17,39 @@ final class SelfDestructUITests: XCTestCase {
         app = XCUIApplication()
     }
 
+    /// First run opens on the welcome screen now.
+    private func dismissWelcome() {
+        let cont = app.buttons["welcome.continue"]
+        if cont.waitForExistence(timeout: 15) { cont.tap() }
+    }
+
+    /// Backgrounds the app and comes back, which is how the vault locks now
+    /// that there is no manual lock button — so this exercises the real
+    /// mechanism rather than a button that only existed for the tests.
+    private func lockVault() {
+        XCUIDevice.shared.press(.home)
+        _ = app.wait(for: .runningBackground, timeout: 15)
+        app.activate()
+        XCTAssertTrue(
+            app.secureTextFields["lock.password"].waitForExistence(timeout: timeout),
+            "leaving the foreground should have locked the vault"
+        )
+    }
+
+    /// A freshly created vault now offers biometric unlock. Tests that are not
+    /// about biometrics decline it, so the alert does not sit over the UI.
+    private func declineBiometricOffer() {
+        let notNow = app.alerts.buttons["Not Now"]
+        if notNow.waitForExistence(timeout: 5) { notNow.tap() }
+    }
+
     override func tearDown() {
         app?.terminate()
         super.tearDown()
     }
 
     private func createVault() {
+        dismissWelcome()
         let password = app.secureTextFields["onboarding.password"]
         XCTAssertTrue(password.waitForExistence(timeout: timeout))
         password.tap()
@@ -32,6 +59,7 @@ final class SelfDestructUITests: XCTestCase {
         confirm.typeText(masterPassword)
         app.buttons["Create Vault"].tap()
         XCTAssertTrue(app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout))
+        declineBiometricOffer()
     }
 
     /// Only the trailing control of a Form toggle actually flips it; tapping the
@@ -82,7 +110,7 @@ final class SelfDestructUITests: XCTestCase {
         createVault()
         arm(attempts: 3)
 
-        app.buttons["Lock"].tap()
+        lockVault()
         attemptWrongPassword()
 
         XCTAssertTrue(
@@ -99,12 +127,15 @@ final class SelfDestructUITests: XCTestCase {
         createVault()
         arm(attempts: 3)
 
-        app.buttons["Lock"].tap()
+        lockVault()
         for _ in 0..<3 {
             attemptWrongPassword()
         }
 
-        // Onboarding is the tell: no vault left to unlock.
+        // First run is the tell: no vault left to unlock. Dismissing the
+        // welcome screen and finding the *create* fields — not the lock
+        // screen — is what proves the vault is gone rather than merely locked.
+        dismissWelcome()
         XCTAssertTrue(
             app.secureTextFields["onboarding.confirm"].waitForExistence(timeout: timeout),
             "the vault should have been erased and the app returned to first run"
@@ -114,6 +145,7 @@ final class SelfDestructUITests: XCTestCase {
         app.terminate()
         app.launchArguments = ["--uitest"]
         app.launch()
+        dismissWelcome()
         XCTAssertTrue(
             app.secureTextFields["onboarding.confirm"].waitForExistence(timeout: timeout),
             "a destroyed vault came back after relaunch"
@@ -128,16 +160,16 @@ final class SelfDestructUITests: XCTestCase {
         createVault()
         arm(attempts: 3)
 
-        app.buttons["Lock"].tap()
+        lockVault()
         attemptWrongPassword()
         XCTAssertTrue(app.staticTexts["Self-destruct armed: 2 attempts left."].waitForExistence(timeout: timeout))
 
         let field = app.secureTextFields["lock.password"]
         field.tap()
         field.typeText(masterPassword + "\n")
-        XCTAssertTrue(app.navigationBars["All Wallets"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.navigationBars["SafeKey"].waitForExistence(timeout: timeout))
 
-        app.buttons["Lock"].tap()
+        lockVault()
         attemptWrongPassword()
         XCTAssertTrue(
             app.staticTexts["Self-destruct armed: 2 attempts left."].waitForExistence(timeout: timeout),

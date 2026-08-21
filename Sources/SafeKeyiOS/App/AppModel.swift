@@ -142,6 +142,7 @@ final class AppModel {
         try await store.write(container)
         anchors.clear()
         adopt(unlocked, container: container)
+        session?.isNewlyCreated = true
     }
 
     func unlock(password: String) async throws {

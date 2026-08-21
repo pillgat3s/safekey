@@ -15,6 +15,32 @@ final class VaultFlowUITests: XCTestCase {
         app = XCUIApplication()
     }
 
+    /// First run opens on the welcome screen now.
+    private func dismissWelcome() {
+        let cont = app.buttons["welcome.continue"]
+        if cont.waitForExistence(timeout: 15) { cont.tap() }
+    }
+
+    /// Backgrounds the app and comes back, which is how the vault locks now
+    /// that there is no manual lock button — so this exercises the real
+    /// mechanism rather than a button that only existed for the tests.
+    private func lockVault() {
+        XCUIDevice.shared.press(.home)
+        _ = app.wait(for: .runningBackground, timeout: 15)
+        app.activate()
+        XCTAssertTrue(
+            app.secureTextFields["lock.password"].waitForExistence(timeout: timeout),
+            "leaving the foreground should have locked the vault"
+        )
+    }
+
+    /// A freshly created vault now offers biometric unlock. Tests that are not
+    /// about biometrics decline it, so the alert does not sit over the UI.
+    private func declineBiometricOffer() {
+        let notNow = app.alerts.buttons["Not Now"]
+        if notNow.waitForExistence(timeout: 5) { notNow.tap() }
+    }
+
     override func tearDown() {
         app?.terminate()
         super.tearDown()
@@ -31,6 +57,7 @@ final class VaultFlowUITests: XCTestCase {
 
     /// Onboarding → unlocked, empty vault.
     private func createVault(file: StaticString = #filePath, line: UInt = #line) {
+        dismissWelcome()
         let password = app.secureTextFields["onboarding.password"]
         XCTAssertTrue(password.waitForExistence(timeout: timeout), "onboarding never appeared", file: file, line: line)
         password.tap()
@@ -46,6 +73,7 @@ final class VaultFlowUITests: XCTestCase {
             "vault creation did not land on the empty list",
             file: file, line: line
         )
+        declineBiometricOffer()
     }
 
     /// Fills the add-wallet sheet and saves.
@@ -68,8 +96,15 @@ final class VaultFlowUITests: XCTestCase {
         app.buttons["Save"].tap()
     }
 
+    /// Wallets live one level below the home screen now: open the "All" tile.
+    private func openAll() {
+        let tile = app.buttons["tile.All"]
+        XCTAssertTrue(tile.waitForExistence(timeout: timeout))
+        tile.tap()
+    }
+
     private func lock() {
-        app.buttons["Lock"].tap()
+        lockVault()
         XCTAssertTrue(lockPasswordField.waitForExistence(timeout: timeout))
     }
 
@@ -80,11 +115,12 @@ final class VaultFlowUITests: XCTestCase {
     func testCreateVaultLandsOnEmptyList() {
         launch()
         createVault()
-        XCTAssertTrue(app.navigationBars["All Wallets"].exists)
+        XCTAssertTrue(app.navigationBars["SafeKey"].exists)
     }
 
     func testCreateVaultRejectsMismatchedConfirmation() {
         launch()
+        dismissWelcome()
         let password = app.secureTextFields["onboarding.password"]
         XCTAssertTrue(password.waitForExistence(timeout: timeout))
         password.tap()
@@ -103,8 +139,9 @@ final class VaultFlowUITests: XCTestCase {
         createVault()
         addEntry(name: "Main Wallet", secret: "0xabc123def456")
 
-        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout))
         XCTAssertFalse(app.staticTexts["No Wallets Yet"].exists)
+        openAll()
+        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout))
     }
 
     func testSecretIsMaskedUntilRevealed() {
@@ -113,15 +150,28 @@ final class VaultFlowUITests: XCTestCase {
         let secret = "0xdeadbeefcafe1234"
         addEntry(name: "Main Wallet", secret: secret)
 
+        openAll()
+        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout))
         app.staticTexts["Main Wallet"].tap()
-        XCTAssertTrue(app.navigationBars["Main Wallet"].waitForExistence(timeout: timeout))
 
-        XCTAssertFalse(app.staticTexts[secret].exists, "the secret must not render before Reveal")
+        let secretRow = app.buttons["detail.secretRow"]
+        XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
+
+        let revealed = app.staticTexts["detail.secret"]
+        XCTAssertFalse(revealed.exists, "the secret must not render before Reveal")
+
+        // Copy and Reveal live in a menu on the row itself now.
+        secretRow.tap()
         app.buttons["Reveal"].tap()
-        XCTAssertTrue(app.staticTexts[secret].waitForExistence(timeout: timeout), "Reveal did not show the secret")
+        XCTAssertTrue(revealed.waitForExistence(timeout: timeout), "Reveal did not show the secret")
+        XCTAssertEqual(revealed.label, secret, "Reveal showed something other than the stored secret")
 
+        secretRow.tap()
         app.buttons["Hide"].tap()
-        XCTAssertFalse(app.staticTexts[secret].exists, "Hide did not re-mask the secret")
+        XCTAssertFalse(
+            app.staticTexts["detail.secret"].waitForExistence(timeout: 3),
+            "Hide did not re-mask the secret"
+        )
     }
 
     /// The core promise: data survives a lock, and only the right password opens it.
@@ -129,13 +179,13 @@ final class VaultFlowUITests: XCTestCase {
         launch()
         createVault()
         addEntry(name: "Main Wallet", secret: "0xabc123def456")
-        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout))
 
         lock()
 
         lockPasswordField.tap()
         lockPasswordField.typeText(masterPassword + "\n")
 
+        openAll()
         XCTAssertTrue(
             app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout),
             "unlocking did not restore the entry"
@@ -154,7 +204,7 @@ final class VaultFlowUITests: XCTestCase {
             app.staticTexts["Wrong password."].waitForExistence(timeout: timeout),
             "a wrong password must say so"
         )
-        XCTAssertFalse(app.navigationBars["All Wallets"].exists, "a wrong password must not open the vault")
+        XCTAssertFalse(app.navigationBars["SafeKey"].exists, "a wrong password must not open the vault")
     }
 
     /// A relaunch is the real persistence test: it reloads the container from disk.
@@ -162,7 +212,6 @@ final class VaultFlowUITests: XCTestCase {
         launch()
         createVault()
         addEntry(name: "Main Wallet", secret: "0xabc123def456")
-        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout))
 
         app.terminate()
         launch(reset: false)
@@ -174,18 +223,18 @@ final class VaultFlowUITests: XCTestCase {
         lockPasswordField.tap()
         lockPasswordField.typeText(masterPassword + "\n")
 
+        openAll()
         XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout))
     }
 
+    /// Search lives on the home screen and shows results in place.
     func testSearchFiltersTheList() {
         launch()
         createVault()
         addEntry(name: "Main Wallet", secret: "0xaaa111")
-        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout))
         addEntry(name: "Cold Storage", secret: "0xbbb222")
-        XCTAssertTrue(app.staticTexts["Cold Storage"].waitForExistence(timeout: timeout))
 
-        let search = app.searchFields.firstMatch
+        let search = app.textFields["home.search"]
         XCTAssertTrue(search.waitForExistence(timeout: timeout))
         search.tap()
         search.typeText("Cold")

@@ -14,6 +14,11 @@ public struct WalletGroup: Codable, Sendable, Equatable, Hashable, Identifiable 
     public var chain: Chain
     /// `#RRGGBB`, or nil to use the app's accent colour.
     public var colorHex: String?
+    /// An SF Symbol name, or a single emoji. `nil` falls back to a folder.
+    /// Stored as a plain string so the format stays portable — a future
+    /// Windows client can show the emoji and substitute its own glyph for a
+    /// symbol name it does not recognise.
+    public var icon: String?
     /// Position within its chain.
     public var sortIndex: Int
 
@@ -22,12 +27,14 @@ public struct WalletGroup: Codable, Sendable, Equatable, Hashable, Identifiable 
         name: String,
         chain: Chain,
         colorHex: String? = nil,
+        icon: String? = nil,
         sortIndex: Int = 0
     ) {
         self.id = id
         self.name = name
         self.chain = chain
         self.colorHex = colorHex
+        self.icon = icon
         self.sortIndex = sortIndex
     }
 
@@ -39,8 +46,18 @@ public struct WalletGroup: Codable, Sendable, Equatable, Hashable, Identifiable 
         name = try container.decode(String.self, forKey: .name)
         chain = try container.decodeIfPresent(Chain.self, forKey: .chain) ?? .evm
         colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex)
+        icon = try container.decodeIfPresent(String.self, forKey: .icon)
         sortIndex = try container.decodeIfPresent(Int.self, forKey: .sortIndex) ?? 0
     }
+
+    /// SF Symbols offered when picking a group icon — a small, legible set
+    /// rather than the whole catalogue, which is unusable in a picker.
+    public static let symbolChoices = [
+        "folder.fill", "star.fill", "flame.fill", "bolt.fill", "leaf.fill",
+        "banknote.fill", "chart.line.uptrend.xyaxis", "shield.fill", "lock.fill",
+        "briefcase.fill", "house.fill", "cart.fill", "gift.fill", "crown.fill",
+        "cube.fill", "sparkles", "globe", "pin.fill",
+    ]
 
     /// Palette offered when creating a group.
     public static let palette = [

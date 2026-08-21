@@ -4,6 +4,7 @@ import SafeKeyCore
 
 struct OnboardingView: View {
     @Environment(AppModel.self) private var model
+    @State private var hasSeenWelcome = false
     @State private var password = ""
     @State private var confirmation = ""
     @State private var isCreating = false
@@ -17,6 +18,15 @@ struct OnboardingView: View {
     }
 
     var body: some View {
+        if hasSeenWelcome {
+            setPassword
+        } else {
+            WelcomeView { withAnimation(.smooth(duration: 0.3)) { hasSeenWelcome = true } }
+                .transition(.opacity)
+        }
+    }
+
+    private var setPassword: some View {
         ScrollView {
             VStack(spacing: 18) {
                 Image(systemName: "key.radiowaves.forward.fill")

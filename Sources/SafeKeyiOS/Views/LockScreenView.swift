@@ -11,37 +11,18 @@ struct LockScreenView: View {
     @State private var isUnlocking = false
     @State private var errorMessage: String?
     @State private var didOfferBiometrics = false
+    @State private var showingPasswordField = false
     @FocusState private var passwordFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
 
-            Image(systemName: "key.radiowaves.forward.fill")
-                .font(.system(size: 56, weight: .medium))
-                .foregroundStyle(.tint)
-                .padding(.bottom, 22)
+            AppIconMark(size: 88)
 
             Text("SafeKey Is Locked")
                 .font(.title2.bold())
-
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .padding(.top, 6)
-
-            SecureField("Master password", text: $password)
-                .accessibilityIdentifier("lock.password")
-                .textFieldStyle(.roundedBorder)
-                .textContentType(.password)
-                .submitLabel(.go)
-                .focused($passwordFocused)
-                .onSubmit(unlock)
-                .disabled(isUnlocking)
-                .padding(.horizontal, 40)
-                .padding(.top, 24)
+                .padding(.top, 20)
 
             if let errorMessage {
                 Text(errorMessage)
@@ -75,27 +56,66 @@ struct LockScreenView: View {
                 .padding(.top, 10)
             }
 
-            Button(action: unlock) {
-                if isUnlocking {
-                    ProgressView().frame(maxWidth: .infinity)
-                } else {
-                    Text("Unlock").frame(maxWidth: .infinity)
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(password.isEmpty || isUnlocking)
-            .padding(.horizontal, 40)
-            .padding(.top, 18)
+            if showingPasswordField || !model.canUnlockWithBiometrics {
+                SecureField("Master password", text: $password)
+                    .accessibilityIdentifier("lock.password")
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.password)
+                    .submitLabel(.go)
+                    .focused($passwordFocused)
+                    .onSubmit(unlock)
+                    .disabled(isUnlocking)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 22)
 
-            if model.canUnlockWithBiometrics {
+                Button(action: unlock) {
+                    if isUnlocking {
+                        ProgressView().frame(maxWidth: .infinity)
+                    } else {
+                        Text("Unlock").frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .buttonBorderShape(.capsule)
+                .disabled(password.isEmpty || isUnlocking)
+                .padding(.horizontal, 40)
+                .padding(.top, 14)
+
+                // Always a way back to biometrics: a cancelled or failed
+                // attempt used to strand you on the password field until the
+                // app was relaunched.
+                if model.canUnlockWithBiometrics {
+                    Button {
+                        unlockWithBiometrics()
+                    } label: {
+                        Label("Unlock with \(model.biometryName)", systemImage: biometrySymbol)
+                    }
+                    .disabled(isUnlocking)
+                    .padding(.top, 16)
+                    .accessibilityIdentifier("lock.biometrics")
+                }
+            } else {
+                // Biometrics is the primary way in; the password is the fallback
+                // behind it, the way iOS presents a locked app.
                 Button {
                     unlockWithBiometrics()
                 } label: {
-                    Label("Unlock with \(model.biometryName)", systemImage: biometrySymbol)
+                    Text("Unlock").frame(minWidth: 120)
                 }
-                .padding(.top, 14)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .buttonBorderShape(.capsule)
                 .disabled(isUnlocking)
+                .padding(.top, 22)
+                .accessibilityIdentifier("lock.biometrics")
+
+                Button("Enter Master Password") {
+                    showingPasswordField = true
+                    passwordFocused = true
+                }
+                .font(.subheadline)
+                .padding(.top, 14)
             }
 
             Spacer()
@@ -114,13 +134,11 @@ struct LockScreenView: View {
     }
 
     private var biometrySymbol: String {
-        model.biometryName == "Face ID" ? "faceid" : "touchid"
-    }
-
-    private var subtitle: String {
-        model.canUnlockWithBiometrics
-            ? "Use \(model.biometryName) or enter your master password."
-            : "Enter your master password to unlock."
+        switch model.biometryName {
+        case "Face ID": "faceid"
+        case "Optic ID": "opticid"
+        default: "touchid"
+        }
     }
 
     private func unlock() {
@@ -157,10 +175,14 @@ struct LockScreenView: View {
             do {
                 try await model.unlockWithBiometrics()
             } catch BiometricError.cancelled, BiometricError.interrupted {
+                // Cancelling biometrics is how you ask for the password.
+                showingPasswordField = true
                 passwordFocused = true
             } catch BiometricError.notEnrolled {
+                showingPasswordField = true
                 errorMessage = "\(model.biometryName) needs setting up again in Settings."
             } catch {
+                showingPasswordField = true
                 errorMessage = "\(model.biometryName) unlock failed — use your password."
             }
         }

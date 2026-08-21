@@ -19,6 +19,20 @@ public struct VaultSettings: Codable, Sendable, Equatable {
     public var sortOrder: SortOrder
     /// Mirror the encrypted vault to iCloud Drive after every change.
     public var cloudBackupEnabled: Bool
+    /// Order of the home screen's category tiles. Empty means the built-in
+    /// order. Stored as identifiers rather than indexes so a tile added in a
+    /// later version simply lands at the end instead of shifting the rest.
+    public var homeTileOrder: [HomeTile]
+    /// Tiles the user has hidden from the home screen.
+    public var hiddenHomeTiles: [HomeTile]
+    /// Order of the chain rows. Chains not listed keep their natural order
+    /// after the ones that are.
+    public var chainOrder: [Chain]
+
+    /// The fixed categories on the home screen.
+    public enum HomeTile: String, Codable, Sendable, Equatable, CaseIterable {
+        case all, favorites, seedPhrases, privateKeys
+    }
 
     public enum RevealPolicy: Codable, Sendable, Equatable {
         case never
@@ -40,7 +54,10 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         revealPolicy: RevealPolicy = .never,
         defaultChain: Chain = .evm,
         sortOrder: SortOrder = .dateModified,
-        cloudBackupEnabled: Bool = false
+        cloudBackupEnabled: Bool = false,
+        homeTileOrder: [HomeTile] = [],
+        hiddenHomeTiles: [HomeTile] = [],
+        chainOrder: [Chain] = []
     ) {
         self.autoLockSeconds = autoLockSeconds
         self.lockOnSleep = lockOnSleep
@@ -50,6 +67,9 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         self.defaultChain = defaultChain
         self.sortOrder = sortOrder
         self.cloudBackupEnabled = cloudBackupEnabled
+        self.homeTileOrder = homeTileOrder
+        self.hiddenHomeTiles = hiddenHomeTiles
+        self.chainOrder = chainOrder
     }
 
     /// Hand-written so settings added in a later version decode as their
@@ -66,5 +86,17 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         defaultChain = try container.decodeIfPresent(Chain.self, forKey: .defaultChain) ?? .evm
         sortOrder = try container.decodeIfPresent(SortOrder.self, forKey: .sortOrder) ?? .dateModified
         cloudBackupEnabled = try container.decodeIfPresent(Bool.self, forKey: .cloudBackupEnabled) ?? false
+        homeTileOrder = try container.decodeIfPresent([HomeTile].self, forKey: .homeTileOrder) ?? []
+        hiddenHomeTiles = try container.decodeIfPresent([HomeTile].self, forKey: .hiddenHomeTiles) ?? []
+        chainOrder = try container.decodeIfPresent([Chain].self, forKey: .chainOrder) ?? []
+    }
+
+    /// Applies the stored order to a set of items, keeping anything unlisted in
+    /// its natural position afterwards. Shared by the tiles and the chain rows
+    /// so both behave the same when something new appears.
+    public static func ordered<T: Equatable>(_ items: [T], by order: [T]) -> [T] {
+        let known = order.filter { items.contains($0) }
+        let rest = items.filter { !known.contains($0) }
+        return known + rest
     }
 }

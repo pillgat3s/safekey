@@ -1,6 +1,7 @@
 import XCTest
 
-/// Groups: create one while editing a wallet, filter by it, rename it, delete it.
+/// Groups: create from the bottom bar, assign while editing a wallet, then
+/// rename and delete by long-pressing the group on the home screen.
 ///
 /// The delete case matters most — a group is a folder, and tidying a folder
 /// away must never take the wallets with it.
@@ -16,6 +17,19 @@ final class GroupsUITests: XCTestCase {
         app.launchArguments = ["--uitest", "--uitest-reset"]
     }
 
+    /// First run opens on the welcome screen now.
+    private func dismissWelcome() {
+        let cont = app.buttons["welcome.continue"]
+        if cont.waitForExistence(timeout: 15) { cont.tap() }
+    }
+
+    /// A freshly created vault now offers biometric unlock. Tests that are not
+    /// about biometrics decline it, so the alert does not sit over the UI.
+    private func declineBiometricOffer() {
+        let notNow = app.alerts.buttons["Not Now"]
+        if notNow.waitForExistence(timeout: 5) { notNow.tap() }
+    }
+
     override func tearDown() {
         app?.terminate()
         super.tearDown()
@@ -23,6 +37,7 @@ final class GroupsUITests: XCTestCase {
 
     private func createVault() {
         app.launch()
+        dismissWelcome()
         let password = app.secureTextFields["onboarding.password"]
         XCTAssertTrue(password.waitForExistence(timeout: timeout))
         password.tap()
@@ -32,10 +47,42 @@ final class GroupsUITests: XCTestCase {
         confirm.typeText(masterPassword)
         app.buttons["Create Vault"].tap()
         XCTAssertTrue(app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout))
+        declineBiometricOffer()
     }
 
-    /// Adds a wallet, creating `group` on the way when given.
-    private func addWallet(name: String, group: String? = nil) {
+    /// Creates a group from the bottom bar, the way the app offers it.
+    private func createGroup(named name: String) {
+        app.buttons["New Group"].tap()
+        XCTAssertTrue(app.navigationBars["New Group"].waitForExistence(timeout: timeout))
+        let field = app.textFields["group.name"]
+        XCTAssertTrue(field.waitForExistence(timeout: timeout))
+        field.tap()
+        field.typeText(name)
+        app.buttons["Create"].tap()
+        XCTAssertTrue(groupRow(name).waitForExistence(timeout: timeout), "the new group should appear on the home screen")
+    }
+
+    /// Assigns a group from the wallet's own screen — the menu on the Group
+    /// row — which is how the app offers it.
+    private func assignGroup(_ group: String, toWalletNamed name: String) {
+        openAll()
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: timeout))
+        app.staticTexts[name].tap()
+
+        let groupRow = app.buttons["detail.groupRow"]
+        XCTAssertTrue(groupRow.waitForExistence(timeout: timeout), "no group row on the wallet screen")
+        groupRow.tap()
+
+        let option = app.buttons[group]
+        XCTAssertTrue(option.waitForExistence(timeout: timeout), "group \(group) was not offered")
+        option.tap()
+
+        // Back to the list, then home.
+        app.navigationBars.buttons.firstMatch.tap()
+        backToHome()
+    }
+
+    private func addWallet(name: String) {
         app.buttons["Add Wallet"].tap()
         XCTAssertTrue(app.navigationBars["New Wallet"].waitForExistence(timeout: timeout))
 
@@ -44,14 +91,6 @@ final class GroupsUITests: XCTestCase {
         nameField.tap()
         nameField.typeText(name)
 
-        if let group {
-            app.buttons["New Group…"].tap()
-            let field = app.alerts.textFields.firstMatch
-            XCTAssertTrue(field.waitForExistence(timeout: timeout))
-            field.typeText(group)
-            app.alerts.buttons["Create"].tap()
-        }
-
         app.buttons["Private Key"].tap()
         let editor = app.textViews["entry.secret"]
         XCTAssertTrue(editor.waitForExistence(timeout: timeout))
@@ -59,36 +98,40 @@ final class GroupsUITests: XCTestCase {
         editor.typeText("0xabc123")
 
         app.buttons["Save"].tap()
-        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.navigationBars["SafeKey"].waitForExistence(timeout: timeout))
     }
 
-    private func openGroups() {
-        app.buttons["Settings"].tap()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: timeout))
-        app.buttons["Groups"].tap()
-        XCTAssertTrue(app.navigationBars["Groups"].waitForExistence(timeout: timeout))
+    private func groupRow(_ name: String) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(identifier: "home.group.\(name)")
+            .firstMatch
     }
 
-    func testCreatingAGroupAssignsItAndListsIt() {
+    private func openAll() {
+        let tile = app.buttons["tile.All"]
+        XCTAssertTrue(tile.waitForExistence(timeout: timeout))
+        tile.tap()
+    }
+
+    private func backToHome() {
+        app.navigationBars.buttons.firstMatch.tap()
+    }
+
+    func testCreatedGroupIsListedOnHome() {
         createVault()
-        addWallet(name: "Trading", group: "Day Trading")
-
-        // The row subtitle carries the group, so assignment is visible at a glance.
-        XCTAssertTrue(
-            app.staticTexts["EVM · Private Key · Day Trading"].waitForExistence(timeout: timeout),
-            "the wallet row should show which group it belongs to"
-        )
-
-        openGroups()
+        createGroup(named: "Day Trading")
         XCTAssertTrue(app.staticTexts["Day Trading"].waitForExistence(timeout: timeout))
     }
 
     func testRenamingAGroupUpdatesTheWalletRow() {
         createVault()
-        addWallet(name: "Trading", group: "Day Trading")
-        openGroups()
+        createGroup(named: "Day Trading")
+        addWallet(name: "Trading")
+        assignGroup("Day Trading", toWalletNamed: "Trading")
 
-        app.staticTexts["Day Trading"].tap()
+        groupRow("Day Trading").press(forDuration: 1.2)
+        app.buttons["Rename"].tap()
+
         let field = app.alerts.textFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: timeout))
         // Clear the prefilled name first: typing appends, and an alert's text
@@ -100,34 +143,31 @@ final class GroupsUITests: XCTestCase {
         app.alerts.buttons["Save"].tap()
 
         XCTAssertTrue(app.staticTexts["Long Term"].waitForExistence(timeout: timeout))
-
-        app.navigationBars["Groups"].buttons.firstMatch.tap()
-        app.buttons["Done"].tap()
+        openAll()
         XCTAssertTrue(
             app.staticTexts["EVM · Private Key · Long Term"].waitForExistence(timeout: timeout),
             "renaming a group should be reflected wherever it is shown"
         )
+        backToHome()
     }
 
     /// Deleting a group must keep its wallets.
     func testDeletingAGroupKeepsItsWallets() {
         createVault()
-        addWallet(name: "Trading", group: "Day Trading")
-        openGroups()
+        createGroup(named: "Day Trading")
+        addWallet(name: "Trading")
+        assignGroup("Day Trading", toWalletNamed: "Trading")
 
-        let row = app.staticTexts["Day Trading"]
-        XCTAssertTrue(row.waitForExistence(timeout: timeout))
-        row.swipeLeft()
-        app.buttons["Delete"].tap()
+        groupRow("Day Trading").press(forDuration: 1.2)
         app.buttons["Delete Group"].tap()
+        app.buttons["Delete"].tap()
 
-        XCTAssertTrue(
-            app.staticTexts["No Groups"].waitForExistence(timeout: timeout),
+        XCTAssertFalse(
+            app.staticTexts["Day Trading"].waitForExistence(timeout: 5),
             "the group should be gone"
         )
 
-        app.navigationBars["Groups"].buttons.firstMatch.tap()
-        app.buttons["Done"].tap()
+        openAll()
         XCTAssertTrue(
             app.staticTexts["Trading"].waitForExistence(timeout: timeout),
             "deleting a group must never delete the wallets inside it"
