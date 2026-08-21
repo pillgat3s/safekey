@@ -255,7 +255,7 @@ final class VaultAdoptionTests: XCTestCase {
             original.dek.withUnsafeBytes { Data($0) },
             "the joining device must derive the same data key"
         )
-        XCTAssertEqual(state.syncedAt.count, 2, "joining should leave the bookkeeping already caught up")
+        XCTAssertEqual(state.agreed.count, 2, "joining should leave the bookkeeping already caught up")
     }
 
     func testWrongPasswordCannotJoin() async throws {

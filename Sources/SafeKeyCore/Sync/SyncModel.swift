@@ -46,11 +46,20 @@ public struct SyncChanges: Sendable, Equatable {
     public let deletedIDs: [String]
     /// Opaque resume point, stored so the next fetch is incremental.
     public let token: Data?
+    /// True when the store answered from scratch rather than from our resume
+    /// point — a first fetch, or a token the server would not accept because
+    /// the zone was deleted and recreated in the meantime.
+    ///
+    /// It matters because our record of what the store already holds is then
+    /// worthless: wallets we believe are safely up there may have gone with the
+    /// old zone, and only what this answer contains is actually known to exist.
+    public let isFullResync: Bool
 
-    public init(records: [SyncRecord], deletedIDs: [String], token: Data?) {
+    public init(records: [SyncRecord], deletedIDs: [String], token: Data?, isFullResync: Bool = false) {
         self.records = records
         self.deletedIDs = deletedIDs
         self.token = token
+        self.isFullResync = isFullResync
     }
 }
 
@@ -71,4 +80,16 @@ public enum SyncError: Error, Equatable, Sendable {
     /// to choose which vault wins instead.
     case differentVault(remote: UUID, local: UUID)
     case unavailable(String)
+}
+
+/// A sync backend that also knows about the account it is talking to.
+///
+/// Split from ``SyncBackend`` so the coordinator can be driven by a stand-in
+/// in tests: everything it needs from CloudKit is on this protocol, and
+/// nothing above it names `CKContainer`.
+public protocol CloudBackend: SyncBackend {
+    /// Vault ids seen on records this device cannot open.
+    var foreignVaultIDs: Set<UUID> { get async }
+    /// Removes this vault's zone entirely.
+    func removeEverything() async throws
 }

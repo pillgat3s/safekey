@@ -99,10 +99,10 @@ struct SettingsView: View {
                             Task { await model.sync.syncIfEnabled(session: session) }
                         }
                         if model.sync.status == .differentVault {
-                            // Joining with the master password comes first: it
-                            // is what the user usually wants, and it keeps both
-                            // devices' data. Replacing discards one side.
-                            // Merging keeps both sides, so it is offered first.
+                            // Merging first: it is the only choice that keeps
+                            // both devices' wallets. Adopting the iCloud vault
+                            // replaces what is here, and replacing the iCloud
+                            // copy discards what is there.
                             Button("Merge with the iCloud Vault…") {
                                 adoptPassword = ""
                                 showingMerge = true

@@ -11,7 +11,7 @@ import CloudKit
 /// change tokens and deletion tracking that make an incremental sync possible.
 /// Without deletion tracking, a wallet deleted on one device would be restored
 /// by the other on the next run.
-public actor CloudKitSyncBackend: SyncBackend {
+public actor CloudKitSyncBackend: CloudBackend {
     public static let containerIdentifier = "iCloud.com.pill.safekey"
     static let zoneName = "SafeKeyVault"
     static let recordType = "Wallet"
@@ -57,6 +57,28 @@ public actor CloudKitSyncBackend: SyncBackend {
         }
     }
 
+    /// Runs an operation, and if the server says the zone is gone, recreates it
+    /// and tries once more.
+    ///
+    /// The zone can disappear underneath a running app: replacing the iCloud
+    /// copy on the other device deletes it. Without this, the first failure
+    /// would stick — we remember having created the zone, so every later call
+    /// would go straight to a zone that is no longer there.
+    private func withZone<T>(_ operation: () async throws -> T) async throws -> T {
+        try await ensureZone()
+        do {
+            return try await operation()
+        } catch let error as CKError where Self.zoneIsGone(error) {
+            zoneEnsured = false
+            try await ensureZone()
+            return try await operation()
+        }
+    }
+
+    private static func zoneIsGone(_ error: CKError) -> Bool {
+        error.code == .zoneNotFound || error.code == .userDeletedZone
+    }
+
     // MARK: - SyncBackend
 
     public func fetchChanges(since token: Data?) async throws -> SyncChanges {
@@ -70,6 +92,10 @@ public actor CloudKitSyncBackend: SyncBackend {
         var deletions: [String] = []
         var cursor = serverToken
         var more = true
+        // Either we had no resume point, or the server refused the one we had
+        // below. Both mean the answer describes the whole zone rather than
+        // what changed, and the caller has to treat its bookkeeping as stale.
+        var fromScratch = serverToken == nil
 
         // The server pages; keep going so one run reaches a consistent point
         // rather than leaving half the changes for next time.
@@ -82,20 +108,25 @@ public actor CloudKitSyncBackend: SyncBackend {
             )
             do {
                 result = try await database.recordZoneChanges(inZoneWith: zoneID, since: cursor)
-            } catch let error as CKError where error.code == .changeTokenExpired {
+            } catch let error as CKError where error.code == .changeTokenExpired || Self.zoneIsGone(error) {
                 // The token points at a zone state the server no longer has —
                 // typically because the zone was deleted and recreated by
                 // another device. Start over from nothing rather than failing
                 // on every sync from here on.
+                if Self.zoneIsGone(error) {
+                    zoneEnsured = false
+                    try await ensureZone()
+                }
                 cursor = nil
                 records.removeAll()
                 deletions.removeAll()
+                fromScratch = true
                 result = try await database.recordZoneChanges(inZoneWith: zoneID, since: nil)
             }
             for modification in result.modificationResultsByID.values {
                 guard let record = try? modification.get().record else { continue }
                 if record.recordType == Self.vaultRecordType { continue }
-                guard let payload = record[Self.recordType] as? Data ?? record["payload"] as? Data,
+                guard let payload = record["payload"] as? Data,
                       let modifiedAt = record["modifiedAt"] as? Date
                 else { continue }
 
@@ -119,35 +150,41 @@ public actor CloudKitSyncBackend: SyncBackend {
         let encoded = cursor.flatMap {
             try? NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true)
         }
-        return SyncChanges(records: records, deletedIDs: deletions, token: encoded)
+        return SyncChanges(
+            records: records,
+            deletedIDs: deletions,
+            token: encoded,
+            isFullResync: fromScratch
+        )
     }
 
     public func fetchVault() async throws -> SyncedVault? {
-        try await ensureZone()
-        let id = CKRecord.ID(recordName: Self.vaultRecordName, zoneID: zoneID)
-        do {
-            let record = try await database.record(for: id)
-            guard let header = record["header"] as? Data,
-                  let raw = record["vaultID"] as? String,
-                  let uuid = UUID(uuidString: raw)
-            else { return nil }
-            return SyncedVault(vaultID: uuid, header: header)
-        } catch let error as CKError where error.code == .unknownItem {
-            return nil
+        try await withZone {
+            let id = CKRecord.ID(recordName: Self.vaultRecordName, zoneID: zoneID)
+            do {
+                let record = try await database.record(for: id)
+                guard let header = record["header"] as? Data,
+                      let raw = record["vaultID"] as? String,
+                      let uuid = UUID(uuidString: raw)
+                else { return nil }
+                return SyncedVault(vaultID: uuid, header: header)
+            } catch let error as CKError where error.code == .unknownItem {
+                return nil
+            }
         }
     }
 
     public func saveVault(_ vault: SyncedVault) async throws {
-        try await ensureZone()
-        let id = CKRecord.ID(recordName: Self.vaultRecordName, zoneID: zoneID)
-        let record = CKRecord(recordType: Self.vaultRecordType, recordID: id)
-        record["header"] = vault.header as CKRecordValue
-        record["vaultID"] = vault.vaultID.uuidString as CKRecordValue
-        _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys)
+        try await withZone {
+            let id = CKRecord.ID(recordName: Self.vaultRecordName, zoneID: zoneID)
+            let record = CKRecord(recordType: Self.vaultRecordType, recordID: id)
+            record["header"] = vault.header as CKRecordValue
+            record["vaultID"] = vault.vaultID.uuidString as CKRecordValue
+            _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys)
+        }
     }
 
     public func save(_ records: [SyncRecord]) async throws {
-        try await ensureZone()
         let ckRecords = records.map { record -> CKRecord in
             let id = CKRecord.ID(recordName: record.id, zoneID: zoneID)
             let ck = CKRecord(recordType: Self.recordType, recordID: id)
@@ -158,14 +195,23 @@ public actor CloudKitSyncBackend: SyncBackend {
         }
         // Last writer wins at the record level; the engine above has already
         // decided which version that should be, and kept the loser.
-        _ = try await database.modifyRecords(saving: ckRecords, deleting: [], savePolicy: .allKeys)
+        try await withZone {
+            _ = try await database.modifyRecords(saving: ckRecords, deleting: [], savePolicy: .allKeys)
+        }
     }
 
     public func delete(ids: [String]) async throws {
         guard !ids.isEmpty else { return }
-        try await ensureZone()
         let recordIDs = ids.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
-        _ = try await database.modifyRecords(saving: [], deleting: recordIDs)
+        do {
+            try await withZone {
+                _ = try await database.modifyRecords(saving: [], deleting: recordIDs)
+            }
+        } catch let error as CKError where error.code == .unknownItem {
+            // Already gone is the outcome we wanted. Deletions are re-sent
+            // until they are confirmed, so meeting one that has already landed
+            // is normal rather than a failure.
+        }
     }
 
     /// Removes everything this vault has in iCloud — used when the user turns

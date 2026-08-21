@@ -39,5 +39,11 @@ struct MainSplitView: View {
         } message: {
             Text(session.saveError ?? "")
         }
+        // Coming back to the app is the moment to pick up what the phone did.
+        // A Mac can sit unlocked all day, so syncing only at unlock would mean
+        // never pulling at all.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await model.sync.syncIfEnabled(session: session) }
+        }
     }
 }

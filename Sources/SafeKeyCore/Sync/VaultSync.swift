@@ -7,6 +7,14 @@ import CryptoKit
 /// blob, and two blobs cannot be merged — whoever wrote last would silently
 /// erase the other device's work. Sealing each wallet separately means a clash
 /// costs one wallet, and even then the loser is kept rather than discarded.
+///
+/// A run is deliberately three steps — ``pull(state:)``, ``merge(_:into:state:)``,
+/// ``push(_:state:)`` — rather than one. Only the first and last touch the
+/// network; the merge in the middle is pure and synchronous, so the caller can
+/// read the vault, merge, and write it back without ever awaiting in between.
+/// Folded into a single `async` function it would have to snapshot the payload
+/// before the fetch and write that snapshot back afterwards, discarding
+/// anything the user changed while the fetch was in flight.
 public struct VaultSync: Sendable {
     public struct Outcome: Sendable, Equatable {
         public var pulled: Int
@@ -22,19 +30,101 @@ public struct VaultSync: Sendable {
             self.deletedLocally = deletedLocally
             self.conflicts = conflicts
         }
+
+        /// Whether the merge changed the vault, and so whether it needs
+        /// writing back. A run that only pushed leaves the file untouched.
+        public var changedLocally: Bool {
+            pulled > 0 || conflicts > 0 || deletedLocally > 0
+        }
     }
 
     /// What a sync run needs to remember between runs, per vault.
     public struct State: Codable, Sendable, Equatable {
-        public var token: Data?
-        /// Wallet id → the modification date last agreed with the server, so a
-        /// local edit since then can be told apart from an untouched wallet.
-        public var syncedAt: [String: Date]
+        /// The digest of a record whose contents we do not know — bookkeeping
+        /// from before digests were kept. Never equal to a real one, so the
+        /// record is simply sent again.
+        static let unknownVersion = "?"
 
-        public init(token: Data? = nil, syncedAt: [String: Date] = [:]) {
+        public var token: Data?
+        /// Record id → a digest of the version the store is known to hold.
+        ///
+        /// A digest rather than a date, because vault dates are whole seconds:
+        /// an edit made in the same second as the last sync would look like the
+        /// version already sent and would never leave the device. It is also
+        /// what tells this device's own record coming back to it apart from a
+        /// genuine edit on the other one — the difference between a quiet sync
+        /// and a spurious "conflicted copy".
+        ///
+        /// Presence means the store holds that record, which is what stops a
+        /// wallet deleted here from being adopted again as if it were new.
+        public var agreed: [String: String]
+        /// Records deleted here that the server has not been told about yet.
+        ///
+        /// Persisted rather than pushed and forgotten: a deletion that only
+        /// exists in memory is lost if the app quits first, and the record
+        /// would then sit in iCloud until some later full fetch handed it back
+        /// as if it were new. Keyed the same way records are, so a group's
+        /// tombstone carries the `group:` prefix.
+        public var pendingDeletions: [String]
+
+        public init(token: Data? = nil, agreed: [String: String] = [:], pendingDeletions: [String] = []) {
             self.token = token
-            self.syncedAt = syncedAt
+            self.agreed = agreed
+            self.pendingDeletions = pendingDeletions
         }
+
+        enum CodingKeys: String, CodingKey {
+            case token, agreed, pendingDeletions
+            /// What this file used to hold: id → modification date.
+            case syncedAt
+        }
+
+        /// Hand-written so bookkeeping from an older build still decodes.
+        /// Falling back to a fresh state would forget which records the store
+        /// holds, and the next fetch would hand every one of them back as new —
+        /// including any deleted here before the upgrade.
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            token = try container.decodeIfPresent(Data.self, forKey: .token)
+            pendingDeletions = try container.decodeIfPresent([String].self, forKey: .pendingDeletions) ?? []
+            if let agreed = try container.decodeIfPresent([String: String].self, forKey: .agreed) {
+                self.agreed = agreed
+            } else {
+                // Dates cannot be turned into digests, so each record is sent
+                // once more. Which records existed is the part worth keeping.
+                let legacy = try container.decodeIfPresent([String: Date].self, forKey: .syncedAt) ?? [:]
+                agreed = legacy.mapValues { _ in Self.unknownVersion }
+            }
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(token, forKey: .token)
+            try container.encode(agreed, forKey: .agreed)
+            try container.encode(pendingDeletions, forKey: .pendingDeletions)
+        }
+
+        /// Notes that a wallet is gone, to be pushed on the next run.
+        public mutating func noteDeletion(walletID: UUID) {
+            note(key: walletID.uuidString)
+        }
+
+        /// Notes that a group is gone. Its wallets are untouched — on the other
+        /// device they simply stop being grouped.
+        public mutating func noteDeletion(groupID: UUID) {
+            note(key: VaultSync.groupPrefix + groupID.uuidString)
+        }
+
+        private mutating func note(key: String) {
+            guard !pendingDeletions.contains(key) else { return }
+            pendingDeletions.append(key)
+        }
+    }
+
+    /// Everything one fetch brought back, carried from the network step to the
+    /// merge step so the merge can run against the current payload.
+    public struct Pulled: Sendable {
+        let changes: SyncChanges
     }
 
     /// Groups share the wallet zone, told apart by a prefix on the record name.
@@ -77,6 +167,28 @@ public struct VaultSync: Sendable {
         return combined
     }
 
+    /// A stable fingerprint of a wallet's contents.
+    ///
+    /// Taken over the encoded model rather than the sealed bytes: sealing uses
+    /// a fresh nonce each time, so two seals of the same wallet share no bytes.
+    static func version(of entry: WalletEntry) -> String {
+        guard let data = try? VaultJSON.encoder().encode(entry) else {
+            return State.unknownVersion + entry.id.uuidString
+        }
+        return digest(data)
+    }
+
+    static func version(of group: WalletGroup) -> String {
+        guard let data = try? VaultJSON.encoder().encode(group) else {
+            return State.unknownVersion + group.id.uuidString
+        }
+        return digest(data)
+    }
+
+    private static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     static func openGroup(_ payload: Data, id: String, dek: SymmetricKey) throws -> WalletGroup {
         let box = try AES.GCM.SealedBox(combined: payload)
         let plaintext = try AES.GCM.open(box, using: dek, authenticating: Data(id.utf8))
@@ -89,12 +201,39 @@ public struct VaultSync: Sendable {
         return try VaultJSON.decoder().decode(WalletEntry.self, from: plaintext)
     }
 
-    // MARK: - Merge
+    // MARK: - A run, in three steps
 
-    /// Pulls remote changes into `payload`, then pushes whatever is newer here.
-    public func run(payload: inout VaultPayload, state: inout State) async throws -> Outcome {
+    /// Sends the deletions the server has not been told about, then fetches
+    /// what changed there.
+    ///
+    /// Deletions go first so that a wallet deleted here is already gone from
+    /// the server before this same run considers what the server holds.
+    public func pull(state: inout State) async throws -> Pulled {
+        if !state.pendingDeletions.isEmpty {
+            let keys = state.pendingDeletions
+            try await backend.delete(ids: keys)
+            for key in keys { state.agreed.removeValue(forKey: key) }
+            state.pendingDeletions.removeAll()
+        }
+        return Pulled(changes: try await backend.fetchChanges(since: state.token))
+    }
+
+    /// Folds what the server sent into `payload`. Pure and synchronous: the
+    /// caller can read the vault, call this, and write it back with nothing
+    /// able to interleave.
+    @discardableResult
+    public func merge(_ pulled: Pulled, into payload: inout VaultPayload, state: inout State) -> Outcome {
         var outcome = Outcome()
-        let changes = try await backend.fetchChanges(since: state.token)
+        let changes = pulled.changes
+
+        if changes.isFullResync {
+            // The store answered from scratch, so what we believed it held is
+            // no longer evidence of anything — a zone that was deleted and
+            // recreated takes every record with it. Rebuild the record of what
+            // is up there from this answer alone; whatever is missing from it
+            // goes back up with the pushes below.
+            state.agreed = [:]
+        }
 
         for record in changes.records where record.id.hasPrefix(Self.groupPrefix) {
             guard let incoming = try? Self.openGroup(record.payload, id: record.id, dek: dek) else { continue }
@@ -105,11 +244,11 @@ public struct VaultSync: Sendable {
                     payload.groups[index] = incoming
                     outcome.pulled += 1
                 }
-            } else if state.syncedAt[record.id] == nil {
+            } else if state.agreed[record.id] == nil {
                 payload.groups.append(incoming)
                 outcome.pulled += 1
             }
-            state.syncedAt[record.id] = incoming.modifiedAt
+            state.agreed[record.id] = Self.version(of: incoming)
         }
 
         for record in changes.records where !record.id.hasPrefix(Self.groupPrefix) {
@@ -118,29 +257,44 @@ public struct VaultSync: Sendable {
                 // is safer than deleting it: another device may hold the key.
                 continue
             }
+            let incomingVersion = Self.version(of: incoming)
             if let index = payload.entries.firstIndex(where: { $0.id == incoming.id }) {
-                let local = payload.entries[index]
-                let lastAgreed = state.syncedAt[record.id]
-                let localChanged = lastAgreed.map { local.modifiedAt > $0 } ?? true
+                let localVersion = Self.version(of: payload.entries[index])
+                guard localVersion != incomingVersion else {
+                    // Byte for byte what we already hold — usually this
+                    // device's own last push echoed back. Counting it as an
+                    // arrival would rewrite the vault on every quiet sync.
+                    state.agreed[record.id] = incomingVersion
+                    continue
+                }
+                let agreed = state.agreed[record.id]
+                let localChanged = agreed != localVersion
+                // Whether the version on the server is a *new* one, or simply
+                // the one we put there. A fetch hands back this device's own
+                // writes, so without this an edit made after the last push
+                // would collide with its own previous version.
+                let remoteChanged = agreed != incomingVersion
 
-                if !localChanged || local.modifiedAt < incoming.modifiedAt {
+                if !localChanged {
                     payload.entries[index] = incoming
                     outcome.pulled += 1
-                } else if local.modifiedAt != incoming.modifiedAt {
-                    // Edited in both places. Never drop either side: keep the
-                    // local one and bring the other in beside it, so the user
-                    // decides rather than the clock.
+                } else if remoteChanged {
+                    // Edited in both places. Never drop either side, whichever
+                    // clock is ahead: keep the local one and bring the other in
+                    // beside it, so the user decides rather than the clock.
                     var copy = incoming
                     copy.id = UUID()
                     copy.name += " (conflicted copy)"
                     payload.entries.append(copy)
                     outcome.conflicts += 1
                 }
-            } else if state.syncedAt[record.id] == nil {
+                // The remaining case is this device's own echo: nothing to do
+                // here, and the newer local version goes up with the pushes.
+            } else if state.agreed[record.id] == nil {
                 payload.entries.append(incoming)
                 outcome.pulled += 1
             }
-            state.syncedAt[record.id] = incoming.modifiedAt
+            state.agreed[record.id] = incomingVersion
         }
 
         for id in changes.deletedIDs {
@@ -159,41 +313,74 @@ public struct VaultSync: Sendable {
                 payload.entries.remove(at: index)
                 outcome.deletedLocally += 1
             }
-            state.syncedAt.removeValue(forKey: id)
-        }
-
-        // Push anything the server has not seen at this modification date.
-        var toPush: [SyncRecord] = []
-        for entry in payload.entries {
-            let key = entry.id.uuidString
-            if state.syncedAt[key] != entry.modifiedAt {
-                toPush.append(SyncRecord(
-                    id: key,
-                    payload: try Self.seal(entry, dek: dek),
-                    modifiedAt: entry.modifiedAt
-                ))
-            }
-        }
-        for group in payload.groups {
-            let key = Self.groupPrefix + group.id.uuidString
-            if state.syncedAt[key] != group.modifiedAt {
-                toPush.append(SyncRecord(
-                    id: key,
-                    payload: try Self.seal(group, dek: dek),
-                    modifiedAt: group.modifiedAt
-                ))
-            }
-        }
-
-        if !toPush.isEmpty {
-            try await backend.save(toPush)
-            for record in toPush { state.syncedAt[record.id] = record.modifiedAt }
-            outcome.pushed = toPush.count
+            state.agreed.removeValue(forKey: id)
+            state.pendingDeletions.removeAll { $0 == id }
         }
 
         state.token = changes.token
         return outcome
     }
+
+    /// Records whose contents differ from what the store is known to hold,
+    /// sealed and ready to send.
+    public struct Pending: Sendable {
+        public let records: [SyncRecord]
+        /// The digest each record will have once the store has it.
+        let versions: [String: String]
+
+        public var count: Int { records.count }
+        public var isEmpty: Bool { records.isEmpty }
+    }
+
+    public func pendingPushes(payload: VaultPayload, state: State) throws -> Pending {
+        var records: [SyncRecord] = []
+        var versions: [String: String] = [:]
+        for entry in payload.entries {
+            let key = entry.id.uuidString
+            let version = Self.version(of: entry)
+            if state.agreed[key] != version {
+                records.append(SyncRecord(
+                    id: key,
+                    payload: try Self.seal(entry, dek: dek),
+                    modifiedAt: entry.modifiedAt
+                ))
+                versions[key] = version
+            }
+        }
+        for group in payload.groups {
+            let key = Self.groupPrefix + group.id.uuidString
+            let version = Self.version(of: group)
+            if state.agreed[key] != version {
+                records.append(SyncRecord(
+                    id: key,
+                    payload: try Self.seal(group, dek: dek),
+                    modifiedAt: group.modifiedAt
+                ))
+                versions[key] = version
+            }
+        }
+        return Pending(records: records, versions: versions)
+    }
+
+    /// Sends records up and records that the store now agrees with them.
+    public func push(_ pending: Pending, state: inout State) async throws {
+        guard !pending.isEmpty else { return }
+        try await backend.save(pending.records)
+        for (key, version) in pending.versions { state.agreed[key] = version }
+    }
+
+    /// The three steps back to back, for callers that hold the payload
+    /// exclusively for the whole run — tests, and one-shot merges.
+    public func run(payload: inout VaultPayload, state: inout State) async throws -> Outcome {
+        let pulled = try await pull(state: &state)
+        var outcome = merge(pulled, into: &payload, state: &state)
+        let pending = try pendingPushes(payload: payload, state: state)
+        try await push(pending, state: &state)
+        outcome.pushed = pending.count
+        return outcome
+    }
+
+    // MARK: - Joining and merging whole vaults
 
     /// Opens the vault that is in iCloud using its master password, and
     /// returns it whole — header, wallets and all.
@@ -227,11 +414,11 @@ public struct VaultSync: Sendable {
             if record.id.hasPrefix(groupPrefix) {
                 guard let group = try? openGroup(record.payload, id: record.id, dek: dek) else { continue }
                 payload.groups.append(group)
-                state.syncedAt[record.id] = group.modifiedAt
+                state.agreed[record.id] = version(of: group)
             } else {
                 guard let entry = try? open(record.payload, id: record.id, dek: dek) else { continue }
                 payload.entries.append(entry)
-                state.syncedAt[record.id] = entry.modifiedAt
+                state.agreed[record.id] = version(of: entry)
             }
         }
         state.token = changes.token
@@ -301,15 +488,23 @@ public struct VaultSync: Sendable {
 
     /// Publishes this vault's header so another device can join with just the
     /// master password.
-    public func publishVault(header: VaultHeader) async throws {
+    ///
+    /// Refuses when iCloud already holds a *different* vault. Overwriting the
+    /// header there would strand that vault's records permanently: they are
+    /// sealed under a key that only its header carries, so replacing it makes
+    /// them unopenable by anyone, including the device that wrote them.
+    ///
+    /// `replacingAnotherVault` is for the two cases where the user has decided
+    /// exactly that — merging the iCloud vault into this one, or replacing it
+    /// outright. Both re-seal the wallets under this vault's key afterwards, so
+    /// the header they leave behind is the right one for what is in the zone.
+    public func publishVault(header: VaultHeader, replacingAnotherVault: Bool = false) async throws {
+        if !replacingAnotherVault,
+           let existing = try await backend.fetchVault(),
+           existing.vaultID != header.vaultID {
+            throw SyncError.differentVault(remote: existing.vaultID, local: header.vaultID)
+        }
         let encoded = try VaultJSON.encoder().encode(header)
         try await backend.saveVault(SyncedVault(vaultID: header.vaultID, header: encoded))
-    }
-
-    /// Tells the remote store a wallet is gone, and forgets its bookkeeping.
-    public func pushDeletion(of ids: [UUID], state: inout State) async throws {
-        let keys = ids.map(\.uuidString)
-        try await backend.delete(ids: keys)
-        for key in keys { state.syncedAt.removeValue(forKey: key) }
     }
 }

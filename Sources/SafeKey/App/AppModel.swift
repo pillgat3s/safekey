@@ -192,7 +192,10 @@ final class AppModel {
             try? await store.writeRescueCopy(current)
         }
         try await session.adopt(merged)
-        await sync.syncIfEnabled(session: session)
+        // Take over rather than sync: the wallets just absorbed are still in
+        // iCloud sealed under the other vault's key, and the vault record
+        // still names it.
+        await sync.takeOverCloudVault(session: session)
     }
 
     func changePassword(old: String, new: String) async throws {
@@ -538,6 +541,7 @@ final class AppModel {
         })
         becomeUnlocked(session)
         if syncable {
+            sync.attach(to: session)
             // Pull whatever the phone added while this Mac was locked.
             Task { [weak self] in await self?.sync.syncIfEnabled(session: session) }
         }
@@ -595,6 +599,7 @@ final class AppModel {
     }
 
     func lock() {
+        sync.cancelPendingWork()
         guard case .unlocked(let session) = state else { return }
         autoLock.stop()
         ClipboardGuard.shared.clearIfStillOurs()

@@ -2,10 +2,11 @@
 
 A local, fully encrypted vault for crypto wallet secrets — seed phrases and
 private keys — on **macOS 26** (styled after Apple's Passwords app) and
-**iOS 18+**.
+**iOS 26**.
 
-Nothing leaves the device. No accounts, no sync, no telemetry, no network code
-in either app at all.
+No accounts, no telemetry, no servers of ours. The vault lives on the device
+and nothing leaves it unless you switch on iCloud sync, which is off until you
+do — and even then only ciphertext travels.
 
 Both apps compile the same `SafeKeyCore` framework, so the encryption, the
 container format, and the self-destruct accounting are one audited source
@@ -27,6 +28,7 @@ opens on the other.
 | **On screen** | `NSWindow.sharingType = .none` hides windows from screenshots and screen recording |
 | **In memory** | Locking drops the session so ARC releases the secrets; auto-lock on sleep, screen lock, and inactivity |
 | **Clipboard** | Copied secrets are marked concealed and auto-cleared, but only if you haven't copied something newer |
+| **iCloud sync** | Off by default. Each wallet is sealed under the vault's data key *before* it is uploaded, so iCloud holds an opaque blob, a date and a vault id — never a name, a chain, or a secret |
 | **Logs** | `WalletEntry.debugDescription` is redacted; state restoration and sudden termination are disabled so no window snapshot ever hits disk |
 
 ### Audit
@@ -83,6 +85,38 @@ permanently brick the app; the data key is now rotated on policy change; and
 - **Screen-capture blocking stops software.** It does not stop a phone camera.
 - Swift cannot reliably zero `String`/`Data` in memory. The mitigation is
   aggressive locking, not a guarantee.
+
+## iCloud sync
+
+Off unless you turn it on, and only across your own Apple devices, through your
+own private CloudKit database.
+
+Each wallet travels as its own record rather than the vault travelling whole:
+two sealed vaults cannot be merged, so whoever saved last would silently erase
+the other device's work. Per wallet, a clash costs one wallet — and even then
+both versions are kept, the incoming one alongside the local one as a
+*conflicted copy*, because a vault is the wrong place to let a clock decide
+which of your keys survives.
+
+What the sync engine keeps between runs is a change token and, per record, a
+digest of the version iCloud is known to hold. A digest rather than a
+timestamp: vault dates have whole-second precision, so an edit made in the same
+second as the last sync would look like the version already sent and would
+never leave the device. The digest also tells this device's own record coming
+back to it apart from a genuine edit on the other one.
+
+Deletions are written down before they are sent, in the same file: a deletion
+that lived only in memory would die with the app, and the record it should have
+removed would come back on the next full fetch as if it were new.
+
+The vault's header is uploaded too — a salt, the KDF parameters, and the data
+key wrapped under your password, the same material an exported backup already
+contains. It is what lets a second device join by typing the master password
+instead of shuttling a file around. A device never publishes its header over a
+*different* vault's: those records are sealed under a key only their own header
+carries, so replacing it would strand them permanently. Instead the app says
+the account holds another vault and offers to merge the two, adopt that one, or
+replace it.
 
 ## Disguise
 

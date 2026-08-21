@@ -17,9 +17,24 @@ final class VaultSession {
     private let onPersist: (Data, Vault.Unlocked) -> Void
     /// Surfaced in an alert when a background save fails; nil otherwise.
     var saveError: String?
+    /// Told about every deletion, so sync can pass it on. Set by the app model,
+    /// which owns both halves. Reported from here rather than from each button
+    /// that deletes something: a screen that forgot to call it would leave the
+    /// wallet alive on the other device with nothing to show it had gone.
+    var onDelete: ((Deletion) -> Void)?
+    /// Told after every write, so sync can send the change on. Every mutation
+    /// the app makes lands here, which is what stops a rename or a regrouping
+    /// from sitting on one device until something else happens to sync.
+    var onChange: (() -> Void)?
+
     /// Set when this session came from creating the vault, so first-run offers
     /// (biometric unlock) can be made once rather than on every unlock.
     var isNewlyCreated = false
+
+    enum Deletion: Sendable {
+        case wallet(UUID)
+        case group(UUID)
+    }
 
     init(
         unlocked: Vault.Unlocked,
@@ -110,6 +125,7 @@ final class VaultSession {
             unlocked.payload.entries[index].groupID = nil
         }
         persist()
+        onDelete?(.group(id))
     }
 
     func move(entryID: WalletEntry.ID, toGroup groupID: UUID?) {
@@ -143,6 +159,7 @@ final class VaultSession {
     func delete(id: WalletEntry.ID) {
         unlocked.payload.entries.removeAll { $0.id == id }
         persist()
+        onDelete?(.wallet(id))
     }
 
     func toggleFavorite(id: WalletEntry.ID) {
@@ -232,6 +249,7 @@ final class VaultSession {
                 do {
                     try await store.write(container)
                     onPersist(container, snapshot)
+                    self.onChange?()
                 } catch {
                     self.saveError = "Could not save the vault: \(error.localizedDescription)"
                 }

@@ -129,6 +129,7 @@ final class AppModel {
     }
 
     func lock() {
+        sync.cancelPendingWork()
         guard case .unlocked = state else { return }
         lockedHeader = session?.header
         state = .locked
@@ -238,7 +239,10 @@ final class AppModel {
             try? await store.writeRescueCopy(current)
         }
         try await session.adopt(merged)
-        await sync.syncIfEnabled(session: session)
+        // Take over rather than sync: the wallets just absorbed are still in
+        // iCloud sealed under the other vault's key, and the vault record
+        // still names it.
+        await sync.takeOverCloudVault(session: session)
     }
 
     // MARK: - Master password
@@ -324,6 +328,7 @@ final class AppModel {
         let session = VaultSession(unlocked: unlocked, store: store, onPersist: { [weak self] written, _ in
             self?.anchors.pin(container: written)
         })
+        sync.attach(to: session)
         state = .unlocked(session)
         // Pull anything the other device added while this one was locked.
         Task { [weak self] in await self?.sync.syncIfEnabled(session: session) }

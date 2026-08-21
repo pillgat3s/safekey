@@ -107,6 +107,21 @@ public actor VaultStore {
         try? Data(contentsOf: syncStateURL)
     }
 
+    /// Written on the calling thread rather than through the actor.
+    ///
+    /// The file records deletions that have not reached iCloud yet, and a
+    /// deletion that is still sitting in a queue when the app goes away is a
+    /// deletion the other device never hears about. It is a few hundred bytes
+    /// of ids, and the coordinator that writes it is its only writer.
+    nonisolated public func saveSyncStateNow(_ data: Data) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(to: syncStateURL, options: [.atomic])
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: syncStateURL.path
+        )
+    }
+
     public func saveSyncState(_ data: Data) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try data.write(to: syncStateURL, options: [.atomic])

@@ -112,6 +112,7 @@ targets:
     platform: macOS
     sources:
       - Tests/SafeKeyCoreTests
+      - Tests/Support
     dependencies:
       - target: SafeKeyCore_macOS
     settings:
@@ -123,6 +124,7 @@ targets:
     platform: iOS
     sources:
       - Tests/SafeKeyCoreTests
+      - Tests/Support
     dependencies:
       - target: SafeKeyCore_iOS
       # Hosted in the app so the tests inherit its Keychain entitlement. A
@@ -138,6 +140,24 @@ targets:
         CODE_SIGNING_ALLOWED: "YES"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SafeKeyiOS.app/SafeKeyiOS"
         BUNDLE_LOADER: "$(TEST_HOST)"
+
+  # The sync coordinator and the session are shared by both apps and belong to
+  # neither, so they are compiled into this bundle directly. Testing them
+  # through an app target would mean launching one; they are plain @MainActor
+  # classes and need no UI.
+  SafeKeySharedTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/SafeKeySharedTests
+      - Tests/Support
+      - Sources/SafeKeyShared/SyncCoordinator.swift
+      - Sources/SafeKeyShared/VaultSession.swift
+    dependencies:
+      - target: SafeKeyCore_macOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andri.safekey.sharedtests
 
   SafeKeyiOSUITests:
     type: bundle.ui-testing
@@ -173,6 +193,7 @@ schemes:
         SafeKey: all
         SafeKeyCore_macOS: all
         SafeKeyCoreTests: [test]
+        SafeKeySharedTests: [test]
     run:
       config: Debug
     test:
@@ -180,6 +201,7 @@ schemes:
       gatherCoverageData: false
       targets:
         - SafeKeyCoreTests
+        - SafeKeySharedTests
 
   SafeKeyiOS:
     build:

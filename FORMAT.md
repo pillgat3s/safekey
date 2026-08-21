@@ -253,3 +253,31 @@ read or write on a non-sandboxed client.
 |---|---|---|
 | `vault.safekey` | the container | 0600, written atomically via a unique `O_EXCL \| O_NOFOLLOW` temp file + rename |
 | `anchor.dat` | trust anchor mirror | 0600, HMAC-authenticated |
+| `sync.json` | what iCloud is known to hold | 0600, plaintext; record ids, digests and a change token — no names, no secrets |
+| `vault.safekey.pre-restore` | rescue copy taken before a restore or a merge | 0600, deleted after the next successful unlock |
+
+## Sync records (on the wire, not on disk)
+
+A synced wallet is **not** the container. Each wallet and each group travels as
+its own sealed blob so two devices can be merged one record at a time:
+
+```
+record id   wallet: <entry UUID>            group: "group:" + <group UUID>
+payload     AES-256-GCM(entry JSON, key: DEK, aad: <record id as UTF-8>)
+modifiedAt  the model's own modifiedAt, carried in the clear for ordering
+vaultID     which vault the record belongs to, in the clear
+```
+
+The AAD is the record id, so a record relabelled onto another wallet's id fails
+to open instead of impersonating it. The entry JSON is the same shape as inside
+the payload (see **Payload JSON**), encoded with sorted keys — which is what
+makes a digest of it a stable version identifier across devices.
+
+The vault's header is uploaded once alongside, under the fixed record name
+`vault`, as `{vaultID, header}` where `header` is the header JSON exactly as it
+appears in the container. It carries the salt, the KDF parameters and the
+wrapped DEK, so a second device that knows the master password can derive the
+DEK and open every record — the same material an exported backup contains.
+
+A client that implements this format can sync against the same zone: nothing in
+it is Apple-specific except the transport.
