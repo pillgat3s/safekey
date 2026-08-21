@@ -19,6 +19,25 @@ public struct SyncRecord: Sendable, Equatable, Hashable {
     }
 }
 
+/// The vault's own header, synced alongside the wallets.
+///
+/// Without it a second device holds records it can never open: the data key
+/// is wrapped inside the header, so a device that has the master password but
+/// not the header still cannot derive anything. This is the same material an
+/// exported backup already contains — a salt, KDF parameters, and a key
+/// wrapped under the password — so putting it in the user's private database
+/// adds no exposure that exporting a backup does not.
+public struct SyncedVault: Sendable, Equatable {
+    public let vaultID: UUID
+    /// The encoded `VaultHeader`.
+    public let header: Data
+
+    public init(vaultID: UUID, header: Data) {
+        self.vaultID = vaultID
+        self.header = header
+    }
+}
+
 /// What a remote store hands back for an incremental fetch.
 public struct SyncChanges: Sendable, Equatable {
     public let records: [SyncRecord]
@@ -41,6 +60,9 @@ public protocol SyncBackend: Sendable {
     func fetchChanges(since token: Data?) async throws -> SyncChanges
     func save(_ records: [SyncRecord]) async throws
     func delete(ids: [String]) async throws
+    /// The vault currently in the remote store, if any.
+    func fetchVault() async throws -> SyncedVault?
+    func saveVault(_ vault: SyncedVault) async throws
 }
 
 public enum SyncError: Error, Equatable, Sendable {

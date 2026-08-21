@@ -203,6 +203,44 @@ final class AppModel {
         try biometricFactor.disable(vaultID: session.header.vaultID)
     }
 
+    /// Replaces this device's vault with the one in iCloud, after unlocking it
+    /// with its master password.
+    ///
+    /// Destructive locally, which is why the caller confirms first: the wallets
+    /// on this device are not merged into the iCloud vault, they are replaced
+    /// by it. A rescue copy of the outgoing vault is kept so a mistake here is
+    /// recoverable.
+    func adoptCloudVault(password: String) async throws {
+        let (unlocked, _) = try await sync.fetchCloudVault(password: password)
+        if let current = try? await store.read() {
+            try? await store.writeRescueCopy(current)
+        }
+        let container = try Vault.seal(unlocked)
+        try Vault.validate(container: container, dek: unlocked.dek)
+        try await store.write(container)
+        anchors.clear()
+        adopt(unlocked, container: container)
+    }
+
+    /// What merging the iCloud vault into this one would add. Nothing is
+    /// written; the result is held so the user can confirm the count first.
+    func previewCloudMerge(password: String) async throws -> (Vault.Unlocked, Int) {
+        guard let session else { throw VaultError.vaultNotFound }
+        await session.flushPendingSaves()
+        return try await sync.previewCloudMerge(password: password, into: session.unlocked)
+    }
+
+    /// Commits a merge the user has agreed to, then pushes the combined set so
+    /// the other device receives what it was missing.
+    func applyCloudMerge(_ merged: Vault.Unlocked) async throws {
+        guard let session else { throw VaultError.vaultNotFound }
+        if let current = try? await store.read() {
+            try? await store.writeRescueCopy(current)
+        }
+        try await session.adopt(merged)
+        await sync.syncIfEnabled(session: session)
+    }
+
     // MARK: - Master password
 
     /// Re-wraps the DEK under a new password. The DEK itself is unchanged, so

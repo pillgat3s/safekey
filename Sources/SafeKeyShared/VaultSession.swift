@@ -95,6 +95,8 @@ final class VaultSession {
 
     func updateGroup(_ group: WalletGroup) {
         guard let index = unlocked.payload.groups.firstIndex(where: { $0.id == group.id }) else { return }
+        var group = group
+        group.modifiedAt = .vaultNow()
         unlocked.payload.groups[index] = group
         persist()
     }

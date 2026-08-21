@@ -161,6 +161,40 @@ final class AppModel {
 
     // MARK: - Credential management (all require the unlocked session)
 
+    /// Replaces this Mac's vault with the one in iCloud, after unlocking it
+    /// with its master password. A rescue copy of the outgoing vault is kept,
+    /// so a mistake here is recoverable.
+    func adoptCloudVault(password: String) async throws {
+        let (unlocked, _) = try await sync.fetchCloudVault(password: password)
+        if let current = try? await store.read() {
+            try? await store.writeRescueCopy(current)
+        }
+        let container = try Vault.seal(unlocked)
+        try Vault.validate(container: container, dek: unlocked.dek)
+        try await store.write(container)
+        anchors.clear()
+        adoptUnlockedSession(unlocked, container: container, store: store)
+    }
+
+    /// What merging the iCloud vault into this one would add. Nothing is
+    /// written; the result is held so the count can be confirmed first.
+    func previewCloudMerge(password: String) async throws -> (Vault.Unlocked, Int) {
+        guard let session else { throw VaultError.vaultNotFound }
+        await session.flushPendingSaves()
+        return try await sync.previewCloudMerge(password: password, into: session.unlocked)
+    }
+
+    /// Commits an agreed merge, then pushes the combined set so the other
+    /// device receives what it was missing.
+    func applyCloudMerge(_ merged: Vault.Unlocked) async throws {
+        guard let session else { throw VaultError.vaultNotFound }
+        if let current = try? await store.read() {
+            try? await store.writeRescueCopy(current)
+        }
+        try await session.adopt(merged)
+        await sync.syncIfEnabled(session: session)
+    }
+
     func changePassword(old: String, new: String) async throws {
         guard let session else { throw VaultError.vaultNotFound }
         let deviceKey = try currentDeviceKeyIfRequired(header: session.header)

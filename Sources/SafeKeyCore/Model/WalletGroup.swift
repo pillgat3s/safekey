@@ -21,6 +21,8 @@ public struct WalletGroup: Codable, Sendable, Equatable, Hashable, Identifiable 
     public var icon: String?
     /// Position within its chain.
     public var sortIndex: Int
+    /// When this group was last changed, so sync can tell which side is newer.
+    public var modifiedAt: Date
 
     public init(
         id: UUID = UUID(),
@@ -28,7 +30,8 @@ public struct WalletGroup: Codable, Sendable, Equatable, Hashable, Identifiable 
         chain: Chain,
         colorHex: String? = nil,
         icon: String? = nil,
-        sortIndex: Int = 0
+        sortIndex: Int = 0,
+        modifiedAt: Date = .vaultNow()
     ) {
         self.id = id
         self.name = name
@@ -36,6 +39,7 @@ public struct WalletGroup: Codable, Sendable, Equatable, Hashable, Identifiable 
         self.colorHex = colorHex
         self.icon = icon
         self.sortIndex = sortIndex
+        self.modifiedAt = modifiedAt
     }
 
     /// Tolerates groups written before they were chain-scoped rather than
@@ -48,6 +52,10 @@ public struct WalletGroup: Codable, Sendable, Equatable, Hashable, Identifiable 
         colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex)
         icon = try container.decodeIfPresent(String.self, forKey: .icon)
         sortIndex = try container.decodeIfPresent(Int.self, forKey: .sortIndex) ?? 0
+        // Groups written before sync existed have no date; treating them as
+        // ancient means a dated copy from another device wins, which is the
+        // safe way round.
+        modifiedAt = try container.decodeIfPresent(Date.self, forKey: .modifiedAt) ?? .distantPast
     }
 
     /// SF Symbols offered when picking a group icon — a small, legible set

@@ -15,6 +15,10 @@ public actor CloudKitSyncBackend: SyncBackend {
     public static let containerIdentifier = "iCloud.com.pill.safekey"
     static let zoneName = "SafeKeyVault"
     static let recordType = "Wallet"
+    static let vaultRecordType = "Vault"
+    /// One vault record per zone, at a fixed name, so both devices address the
+    /// same record rather than each creating its own.
+    static let vaultRecordName = "vault"
 
     private let database: CKDatabase
     private let zoneID: CKRecordZone.ID
@@ -70,9 +74,27 @@ public actor CloudKitSyncBackend: SyncBackend {
         // The server pages; keep going so one run reaches a consistent point
         // rather than leaving half the changes for next time.
         while more {
-            let result = try await database.recordZoneChanges(inZoneWith: zoneID, since: cursor)
+            let result: (
+                modificationResultsByID: [CKRecord.ID: Result<CKDatabase.RecordZoneChange.Modification, any Error>],
+                deletions: [CKDatabase.RecordZoneChange.Deletion],
+                changeToken: CKServerChangeToken,
+                moreComing: Bool
+            )
+            do {
+                result = try await database.recordZoneChanges(inZoneWith: zoneID, since: cursor)
+            } catch let error as CKError where error.code == .changeTokenExpired {
+                // The token points at a zone state the server no longer has —
+                // typically because the zone was deleted and recreated by
+                // another device. Start over from nothing rather than failing
+                // on every sync from here on.
+                cursor = nil
+                records.removeAll()
+                deletions.removeAll()
+                result = try await database.recordZoneChanges(inZoneWith: zoneID, since: nil)
+            }
             for modification in result.modificationResultsByID.values {
                 guard let record = try? modification.get().record else { continue }
+                if record.recordType == Self.vaultRecordType { continue }
                 guard let payload = record[Self.recordType] as? Data ?? record["payload"] as? Data,
                       let modifiedAt = record["modifiedAt"] as? Date
                 else { continue }
@@ -100,6 +122,30 @@ public actor CloudKitSyncBackend: SyncBackend {
         return SyncChanges(records: records, deletedIDs: deletions, token: encoded)
     }
 
+    public func fetchVault() async throws -> SyncedVault? {
+        try await ensureZone()
+        let id = CKRecord.ID(recordName: Self.vaultRecordName, zoneID: zoneID)
+        do {
+            let record = try await database.record(for: id)
+            guard let header = record["header"] as? Data,
+                  let raw = record["vaultID"] as? String,
+                  let uuid = UUID(uuidString: raw)
+            else { return nil }
+            return SyncedVault(vaultID: uuid, header: header)
+        } catch let error as CKError where error.code == .unknownItem {
+            return nil
+        }
+    }
+
+    public func saveVault(_ vault: SyncedVault) async throws {
+        try await ensureZone()
+        let id = CKRecord.ID(recordName: Self.vaultRecordName, zoneID: zoneID)
+        let record = CKRecord(recordType: Self.vaultRecordType, recordID: id)
+        record["header"] = vault.header as CKRecordValue
+        record["vaultID"] = vault.vaultID.uuidString as CKRecordValue
+        _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys)
+    }
+
     public func save(_ records: [SyncRecord]) async throws {
         try await ensureZone()
         let ckRecords = records.map { record -> CKRecord in
@@ -125,7 +171,12 @@ public actor CloudKitSyncBackend: SyncBackend {
     /// Removes everything this vault has in iCloud — used when the user turns
     /// sync off and asks for the copy to be cleared.
     public func removeEverything() async throws {
-        _ = try? await database.modifyRecordZones(saving: [], deleting: [zoneID])
+        do {
+            _ = try await database.modifyRecordZones(saving: [], deleting: [zoneID])
+        } catch let error as CKError where error.code == .zoneNotFound || error.code == .unknownItem {
+            // Nothing there to remove is the desired end state, not a failure.
+        }
         zoneEnsured = false
+        foreignVaultIDs = []
     }
 }

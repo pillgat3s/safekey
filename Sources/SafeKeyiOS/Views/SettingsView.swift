@@ -20,6 +20,13 @@ struct SettingsView: View {
     @State private var showingDefaultChainPicker = false
     @State private var showingRemoveSync = false
     @State private var showingReplaceCloud = false
+    @State private var showingAdopt = false
+    @State private var adoptPassword = ""
+    @State private var adoptError: String?
+    @State private var isAdopting = false
+    @State private var showingMerge = false
+    @State private var pendingMerge: (Vault.Unlocked, Int)?
+    @State private var showingMergeConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -92,6 +99,19 @@ struct SettingsView: View {
                             Task { await model.sync.syncIfEnabled(session: session) }
                         }
                         if model.sync.status == .differentVault {
+                            // Joining with the master password comes first: it
+                            // is what the user usually wants, and it keeps both
+                            // devices' data. Replacing discards one side.
+                            // Merging keeps both sides, so it is offered first.
+                            Button("Merge with the iCloud Vault…") {
+                                adoptPassword = ""
+                                showingMerge = true
+                            }
+                            Button("Use the iCloud Vault Here…") {
+                                adoptPassword = ""
+                                adoptError = nil
+                                showingAdopt = true
+                            }
                             Button("Replace iCloud Copy with This Vault", role: .destructive) {
                                 showingReplaceCloud = true
                             }
@@ -171,6 +191,26 @@ struct SettingsView: View {
             .alert("Backup", isPresented: alertBinding(for: $infoMessage)) {
                 Button("OK", role: .cancel) {}
             } message: { Text(infoMessage ?? "") }
+            .alert("Merge with the iCloud Vault", isPresented: $showingMerge) {
+                SecureField("Master password", text: $adoptPassword)
+                Button("Cancel", role: .cancel) { adoptPassword = "" }
+                Button("Continue") { previewMerge() }
+            } message: {
+                Text("Enter the master password for the vault in iCloud. Its wallets are added to this device and yours are kept — nothing is removed. You will see how many would be added before anything changes.")
+            }
+            .alert("Add \(pendingMerge?.1 ?? 0) wallets?", isPresented: $showingMergeConfirm) {
+                Button("Cancel", role: .cancel) { pendingMerge = nil }
+                Button("Merge") { applyMerge() }
+            } message: {
+                Text("The iCloud vault has \(pendingMerge?.1 ?? 0) wallets that are not on this device. They will be added here and re-encrypted with this vault's master password, so from now on this password opens all of them.")
+            }
+            .alert("Use the iCloud Vault", isPresented: $showingAdopt) {
+                SecureField("Master password", text: $adoptPassword)
+                Button("Cancel", role: .cancel) { adoptPassword = "" }
+                Button("Unlock") { adoptCloudVault() }
+            } message: {
+                Text("Enter the master password for the vault in iCloud. This device's current wallets are replaced by it — export a backup first if you want to keep them. A copy of the outgoing vault is kept in case this was a mistake.")
+            }
             .confirmationDialog(
                 "Replace the iCloud copy?",
                 isPresented: $showingReplaceCloud,
@@ -180,7 +220,7 @@ struct SettingsView: View {
                     Task { await model.sync.replaceCloudCopy(session: session) }
                 }
             } message: {
-                Text("iCloud currently holds a vault created with a different master password, which this device cannot read. Replacing it uploads this device's wallets instead. The wallets on your other device stay on that device — but they stop syncing until you restore a backup from one onto the other.")
+                Text("iCloud holds a different vault — one created separately from this device's, so its wallets are sealed with a key this device does not have. Using the same master password on both does not make them the same vault.\n\nTo put this device's wallets everywhere: replace the iCloud copy, then restore this device's backup on the other one.\n\nTo keep the other device's wallets instead: export a backup there and restore it here — do not replace.")
             }
             .confirmationDialog(
                 "Stop syncing and remove the iCloud copy?",
@@ -288,6 +328,56 @@ struct SettingsView: View {
             get: { session.header.selfDestruct.maxAttempts },
             set: { newValue in session.updateHeader { $0.selfDestruct.maxAttempts = newValue } }
         )
+    }
+
+    private func previewMerge() {
+        let password = adoptPassword
+        adoptPassword = ""
+        Task {
+            do {
+                let result = try await model.previewCloudMerge(password: password)
+                if result.1 == 0 {
+                    infoMessage = "Nothing to add — the iCloud vault holds no wallets this device is missing."
+                } else {
+                    pendingMerge = result
+                    showingMergeConfirm = true
+                }
+            } catch VaultError.wrongPassword {
+                errorMessage = "That password does not open the vault in iCloud."
+            } catch {
+                errorMessage = "Could not read the iCloud vault: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func applyMerge() {
+        guard let (merged, count) = pendingMerge else { return }
+        pendingMerge = nil
+        Task {
+            do {
+                try await model.applyCloudMerge(merged)
+                infoMessage = "Added \(count) wallets from iCloud."
+            } catch {
+                errorMessage = "Could not merge: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func adoptCloudVault() {
+        let password = adoptPassword
+        adoptPassword = ""
+        isAdopting = true
+        Task {
+            defer { isAdopting = false }
+            do {
+                try await model.adoptCloudVault(password: password)
+                dismiss()
+            } catch VaultError.wrongPassword {
+                errorMessage = "That password does not open the vault in iCloud."
+            } catch {
+                errorMessage = "Could not use the iCloud vault: \(error.localizedDescription)"
+            }
+        }
     }
 
     private var syncStatusText: String {
