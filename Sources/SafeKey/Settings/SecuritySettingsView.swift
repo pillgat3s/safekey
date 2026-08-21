@@ -105,6 +105,14 @@ struct SecuritySettingsView: View {
                     LabeledContent("Status") {
                         Text(syncStatusText).foregroundStyle(.secondary)
                     }
+                    if model.sync.status == .differentVault {
+                        Text("iCloud holds a vault created with a different master password, which this Mac cannot read. Replace it with this Mac's wallets, or restore a backup from your other device so both share one vault.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        Button("Replace iCloud Copy with This Vault") {
+                            Task { await model.sync.replaceCloudCopy(session: session) }
+                        }
+                    }
                     HStack {
                         Button("Sync Now") {
                             Task { await model.sync.syncIfEnabled(session: session) }

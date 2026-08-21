@@ -89,6 +89,28 @@ final class SyncCoordinator {
         persistState()
     }
 
+    /// Takes over the iCloud copy with this device's vault.
+    ///
+    /// The only resolution available when iCloud holds a *different* vault:
+    /// those records are sealed under another master password, so this device
+    /// cannot read, merge, or adopt them — it can only replace them. The other
+    /// direction (adopting the iCloud vault) is a backup restore, because it
+    /// needs that vault's password.
+    func replaceCloudCopy(session: VaultSession) async {
+        let backend = self.backend ?? CloudKitSyncBackend(vaultID: session.header.vaultID)
+        status = .syncing
+        try? await backend.removeEverything()
+
+        // A fresh backend and empty bookkeeping, or the old change token would
+        // point into a zone that no longer exists.
+        self.backend = CloudKitSyncBackend(vaultID: session.header.vaultID)
+        state = VaultSync.State()
+        loadedStateFor = session.header.vaultID
+        await store.clearSyncState()
+
+        await syncIfEnabled(session: session)
+    }
+
     /// Removes this vault's records from iCloud and forgets the local
     /// bookkeeping, so turning sync back on starts clean.
     func removeFromCloud(session: VaultSession) async {

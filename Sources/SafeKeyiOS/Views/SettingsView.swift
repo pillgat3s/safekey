@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var includeInCloudBackup = true
     @State private var showingDefaultChainPicker = false
     @State private var showingRemoveSync = false
+    @State private var showingReplaceCloud = false
 
     var body: some View {
         NavigationStack {
@@ -89,6 +90,11 @@ struct SettingsView: View {
                         }
                         Button("Sync Now") {
                             Task { await model.sync.syncIfEnabled(session: session) }
+                        }
+                        if model.sync.status == .differentVault {
+                            Button("Replace iCloud Copy with This Vault", role: .destructive) {
+                                showingReplaceCloud = true
+                            }
                         }
                         Button("Stop Syncing and Remove Copy", role: .destructive) {
                             showingRemoveSync = true
@@ -165,6 +171,17 @@ struct SettingsView: View {
             .alert("Backup", isPresented: alertBinding(for: $infoMessage)) {
                 Button("OK", role: .cancel) {}
             } message: { Text(infoMessage ?? "") }
+            .confirmationDialog(
+                "Replace the iCloud copy?",
+                isPresented: $showingReplaceCloud,
+                titleVisibility: .visible
+            ) {
+                Button("Replace", role: .destructive) {
+                    Task { await model.sync.replaceCloudCopy(session: session) }
+                }
+            } message: {
+                Text("iCloud currently holds a vault created with a different master password, which this device cannot read. Replacing it uploads this device's wallets instead. The wallets on your other device stay on that device — but they stop syncing until you restore a backup from one onto the other.")
+            }
             .confirmationDialog(
                 "Stop syncing and remove the iCloud copy?",
                 isPresented: $showingRemoveSync,
