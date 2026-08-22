@@ -400,6 +400,64 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(quiet?.changedLocally, false)
     }
 
+    // MARK: - The two destructive buttons
+
+    /// "Stop Syncing and Remove Copy" takes the vault out of iCloud. What it
+    /// must never do is take it off the device the user pressed it on.
+    func testRemovingTheCloudCopyLeavesTheVaultOnTheDevice() async throws {
+        let rig = try makeRig(entries: [entry("Cold"), entry("Hot")])
+        await rig.coordinator.syncIfEnabled(session: rig.session)
+        var live = await rig.server.liveRecordIDs
+        XCTAssertEqual(live.count, 2)
+
+        await rig.coordinator.removeFromCloud(session: rig.session)
+
+        live = await rig.server.liveRecordIDs
+        XCTAssertTrue(live.isEmpty, "the iCloud copy is what was asked for")
+        XCTAssertEqual(
+            Set(rig.session.entries.map(\.name)),
+            ["Cold", "Hot"],
+            "the wallets on this device are not what was asked for"
+        )
+        XCTAssertEqual(rig.coordinator.status, .off)
+
+        // And the bookkeeping is gone, so switching sync back on starts clean
+        // rather than believing iCloud still holds what it no longer has.
+        let restarted = await rig.coordinator.syncIfEnabled(session: rig.session)
+        XCTAssertEqual(restarted?.pushed, 2)
+    }
+
+    /// "Replace iCloud Copy with This Vault" is the way out when the account
+    /// holds a vault this device cannot open. It has to actually clear the
+    /// other one — reporting success while leaving it there looks exactly like
+    /// the button doing nothing.
+    func testReplacingTheCloudCopyClearsTheVaultThatWasThere() async throws {
+        let server = CloudServer()
+        let (_, theirs) = try Vault.create(password: "different-pass-2", iterations: 1_000)
+        let theirSync = VaultSync(backend: DeviceBackend(server: server), dek: theirs.dek)
+        try await theirSync.publishVault(header: theirs.header)
+        var theirPayload = VaultPayload(entries: [
+            WalletEntry(name: "Not mine", chain: .evm, kind: .privateKey, secret: "theirs")
+        ])
+        var theirState = VaultSync.State()
+        _ = try await theirSync.run(payload: &theirPayload, state: &theirState)
+
+        let rig = try makeRig(server: server, entries: [entry("Mine")])
+        await rig.coordinator.syncIfEnabled(session: rig.session)
+        XCTAssertEqual(rig.coordinator.status, .differentVault)
+
+        await rig.coordinator.replaceCloudCopy(session: rig.session)
+
+        let vault = await server.fetchVault()
+        XCTAssertEqual(vault?.vaultID, rig.session.header.vaultID, "the vault record has to be ours now")
+        let live = await server.liveRecordIDs
+        XCTAssertEqual(live, [rig.session.entries[0].id.uuidString], "and nothing of theirs may be left")
+        XCTAssertEqual(Set(rig.session.entries.map(\.name)), ["Mine"])
+        guard case .idle = rig.coordinator.status else {
+            return XCTFail("expected an idle status, got \(rig.coordinator.status)")
+        }
+    }
+
     // MARK: - Switched off
 
     func testNothingHappensWhileSyncIsOff() async throws {
