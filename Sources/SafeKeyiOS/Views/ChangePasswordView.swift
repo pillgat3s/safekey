@@ -50,7 +50,12 @@ struct ChangePasswordView: View {
             } header: {
                 Text("New Password")
             } footer: {
-                Text("Your wallets are not re-encrypted — only the key that protects them is re-wrapped, so this is instant. Any backup you exported earlier still opens with the password it had when you saved it.")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Your wallets are not re-encrypted — only the key that protects them is re-wrapped, so this is instant. Any backup you exported earlier still opens with the password it had when you saved it.")
+                    if session.settings.cloudSyncEnabled {
+                        Text("This changes the password on this iPhone. Your other devices keep the one they already have and go on syncing — the wallets travel sealed under a key that a password change does not touch. Change it there too if you meant to retire the old one everywhere.")
+                    }
+                }
             }
 
             if let errorMessage {

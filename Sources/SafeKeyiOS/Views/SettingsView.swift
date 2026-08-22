@@ -86,7 +86,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Security")
                 } footer: {
-                    Text("The vault locks whenever the app leaves the foreground.\n\nErase after failed attempts: that many wrong passwords in a row and SafeKey deletes the vault and every stored key — no undo, no recovery. A correct password resets the count. It protects a stolen phone, not a backup copy someone already took.")
+                    Text(selfDestructExplainer)
                 }
 
                 Section {
@@ -378,6 +378,16 @@ struct SettingsView: View {
                 errorMessage = "Could not use the iCloud vault: \(error.localizedDescription)"
             }
         }
+    }
+
+    /// Says what an erase actually reaches, which is not the same answer once
+    /// the vault is syncing.
+    private var selfDestructExplainer: String {
+        let base = "The vault locks whenever the app leaves the foreground.\n\nErase after failed attempts: that many wrong passwords in a row and SafeKey deletes the vault and every stored key. A correct password resets the count. It protects a stolen phone, not a backup copy someone already took."
+        guard session.settings.cloudSyncEnabled else {
+            return base + " There is no undo."
+        }
+        return base + "\n\nWith iCloud sync on, an erase reaches this iPhone only. The copy in iCloud and the one on your other devices are left alone — on purpose: otherwise anyone who takes a device could destroy your vault everywhere just by failing to unlock it. Turn sync off first if you want an erase to be the end of it."
     }
 
     private var syncStatusText: String {

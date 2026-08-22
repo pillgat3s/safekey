@@ -23,7 +23,7 @@ opens on the other.
 | **Tamper detection** | The plaintext header is authenticated as GCM additional data. Because that check runs only *after* a successful unwrap, destructive decisions instead use a trust anchor pinned at the last successful unlock — a modified vault file is detected and reported before you type anything |
 | **Touch ID** | Optional. Keeps a biometry-protected copy of the data key in the Keychain |
 | **USB security key** | Optional second factor, cryptographically enforced: the data key is wrapped under `HKDF(passwordKEK ‖ deviceKey)`, so the right password without the stick cannot open the vault. Enabling it **rotates** the data key, so older backups plus the password cannot decrypt anything written afterwards |
-| **Self-destruct** | Optional. After N wrong passwords, deletes every wrapped copy of the key (both Keychain domains) and the vault file. Fires only under the *pinned* policy on an *unmodified* file, so no one can weaponize it against you |
+| **Self-destruct** | Optional. After N wrong passwords, deletes every wrapped copy of the key (both Keychain domains) and the vault file. Fires only under the *pinned* policy on an *unmodified* file, so no one can weaponize it against you. With iCloud sync on it erases **this device** — the copy in iCloud and on your other devices is deliberately left alone, or taking one device would be enough to destroy the vault everywhere |
 | **At rest** | Vault file is `0600`, written atomically (temp + rename), never partially written |
 | **On screen** | `NSWindow.sharingType = .none` hides windows from screenshots and screen recording |
 | **In memory** | Locking drops the session so ARC releases the secrets; auto-lock on sleep, screen lock, and inactivity |
@@ -108,6 +108,12 @@ back to it apart from a genuine edit on the other one.
 Deletions are written down before they are sent, in the same file: a deletion
 that lived only in memory would die with the app, and the record it should have
 removed would come back on the next full fetch as if it were new.
+
+A password change is per device. The wallets travel sealed under the vault's
+data key, and re-wrapping that key under a new password leaves the data key
+alone — so the other device carries on syncing with the password it already
+has, and both remain correct. Changing it everywhere means changing it on each
+device; the app says so where you change it.
 
 The vault's header is uploaded too — a salt, the KDF parameters, and the data
 key wrapped under your password, the same material an exported backup already

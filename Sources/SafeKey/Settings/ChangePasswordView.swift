@@ -37,6 +37,13 @@ struct ChangePasswordView: View {
             }
             .textFieldStyle(.roundedBorder)
 
+            if model.session?.settings.cloudSyncEnabled == true {
+                Text("This changes the password on this Mac. Your other devices keep the one they already have and go on syncing — the wallets travel sealed under a key that a password change does not touch. Change it there too if you meant to retire the old one everywhere.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
