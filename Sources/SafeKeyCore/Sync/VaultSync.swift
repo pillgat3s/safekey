@@ -237,10 +237,22 @@ public struct VaultSync: Sendable {
 
         for record in changes.records where record.id.hasPrefix(Self.groupPrefix) {
             guard let incoming = try? Self.openGroup(record.payload, id: record.id, dek: dek) else { continue }
+            let incomingVersion = Self.version(of: incoming)
             if let index = payload.groups.firstIndex(where: { $0.id == incoming.id }) {
+                let local = payload.groups[index]
+                let localVersion = Self.version(of: local)
                 // Groups are small and rarely edited, so newest wins is enough
                 // here — unlike a wallet, nothing irreplaceable is lost.
-                if payload.groups[index].modifiedAt < incoming.modifiedAt {
+                //
+                // When the clocks tie the digests decide. Vault dates are whole
+                // seconds, so two devices renaming a group in the same second
+                // have the same timestamp, and "newer" cannot separate them:
+                // each would keep its own copy, push it, and be handed the
+                // other's back for ever. Any rule settles it as long as both
+                // devices reach the same answer without another round.
+                let takesIncoming = local.modifiedAt < incoming.modifiedAt
+                    || (local.modifiedAt == incoming.modifiedAt && localVersion < incomingVersion)
+                if localVersion != incomingVersion, takesIncoming {
                     payload.groups[index] = incoming
                     outcome.pulled += 1
                 }
@@ -248,7 +260,7 @@ public struct VaultSync: Sendable {
                 payload.groups.append(incoming)
                 outcome.pulled += 1
             }
-            state.agreed[record.id] = Self.version(of: incoming)
+            state.agreed[record.id] = incomingVersion
         }
 
         for record in changes.records where !record.id.hasPrefix(Self.groupPrefix) {
@@ -315,6 +327,21 @@ public struct VaultSync: Sendable {
             }
             state.agreed.removeValue(forKey: id)
             state.pendingDeletions.removeAll { $0 == id }
+        }
+
+        // Nothing may be left pointing at a group that is not here.
+        //
+        // A record can arrive naming a group this device deleted earlier, and
+        // a conflicted copy is the case that sticks: it is a brand-new record
+        // carrying the other side's group id, so no other device ever corrects
+        // it. A wallet holding an id that is not in the file appears neither in
+        // that group nor in the ungrouped list — it drops out of the way the
+        // vault is browsed while still being in it.
+        let knownGroups = Set(payload.groups.map(\.id))
+        for index in payload.entries.indices {
+            if let groupID = payload.entries[index].groupID, !knownGroups.contains(groupID) {
+                payload.entries[index].groupID = nil
+            }
         }
 
         state.token = changes.token

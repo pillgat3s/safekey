@@ -110,3 +110,31 @@ struct DeviceBackend: CloudBackend {
     func saveVault(_ vault: SyncedVault) async throws { await server.saveVault(vault) }
 }
 
+
+/// A device: its own copy of the vault, its own bookkeeping, one shared zone.
+struct Device {
+    var payload: VaultPayload
+    var state = VaultSync.State()
+    let sync: VaultSync
+
+    init(server: CloudServer, dek: SymmetricKey, payload: VaultPayload = VaultPayload()) {
+        self.payload = payload
+        self.sync = VaultSync(backend: DeviceBackend(server: server), dek: dek)
+    }
+
+    @discardableResult
+    mutating func syncNow() async throws -> VaultSync.Outcome {
+        try await sync.run(payload: &payload, state: &state)
+    }
+
+    /// Quitting and relaunching: the payload and the bookkeeping come back
+    /// from disk, in-memory state does not.
+    mutating func relaunch() throws {
+        let encoded = try JSONEncoder().encode(state)
+        state = try JSONDecoder().decode(VaultSync.State.self, from: encoded)
+    }
+
+    var names: Set<String> { Set(payload.entries.map(\.name)) }
+    var groupNames: Set<String> { Set(payload.groups.map(\.name)) }
+}
+

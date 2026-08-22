@@ -2,33 +2,6 @@ import XCTest
 import CryptoKit
 @testable import SafeKeyCore
 
-/// A device: its own copy of the vault, its own bookkeeping, one shared zone.
-private struct Device {
-    var payload: VaultPayload
-    var state = VaultSync.State()
-    let sync: VaultSync
-
-    init(server: CloudServer, dek: SymmetricKey, payload: VaultPayload = VaultPayload()) {
-        self.payload = payload
-        self.sync = VaultSync(backend: DeviceBackend(server: server), dek: dek)
-    }
-
-    @discardableResult
-    mutating func syncNow() async throws -> VaultSync.Outcome {
-        try await sync.run(payload: &payload, state: &state)
-    }
-
-    /// Quitting and relaunching: the payload and the bookkeeping come back
-    /// from disk, in-memory state does not.
-    mutating func relaunch() throws {
-        let encoded = try JSONEncoder().encode(state)
-        state = try JSONDecoder().decode(VaultSync.State.self, from: encoded)
-    }
-
-    var names: Set<String> { Set(payload.entries.map(\.name)) }
-    var groupNames: Set<String> { Set(payload.groups.map(\.name)) }
-}
-
 /// Two devices, one iCloud account — the case the whole feature exists for.
 final class TwoDeviceSyncTests: XCTestCase {
     private let dek = SymmetricKey(size: .bits256)
@@ -248,6 +221,80 @@ final class TwoDeviceSyncTests: XCTestCase {
         XCTAssertTrue(phone.payload.groups.isEmpty, "the group has to go")
         XCTAssertEqual(phone.payload.entries.count, 1, "its wallet has to stay")
         XCTAssertNil(phone.payload.entries.first?.groupID)
+    }
+
+    /// A wallet arriving from another device can name a group this one no
+    /// longer has. It must not keep it: a wallet holding an id that is not in
+    /// the vault shows up neither in that group nor in the ungrouped list, so
+    /// it falls out of the way the vault is browsed while still being in it.
+    ///
+    /// The case that sticks is a conflicted copy, because that is a brand-new
+    /// record — no other device will ever correct it.
+    func testAnArrivingWalletNeverKeepsAGroupThisDeviceDoesNotHave() async throws {
+        let server = CloudServer()
+        var phone = Device(server: server, dek: dek, payload: VaultPayload(entries: [entry("Ledger")]))
+        try await phone.syncNow()
+
+        // The other device still holds a group this one deleted long ago, and
+        // pushes the wallet still filed under it.
+        var theirs = phone.payload.entries[0]
+        theirs.groupID = UUID()
+        theirs.secret = "edited there"
+        theirs.modifiedAt = later()
+        await server.save([SyncRecord(
+            id: theirs.id.uuidString,
+            payload: try VaultSync.seal(theirs, dek: dek),
+            modifiedAt: theirs.modifiedAt
+        )])
+
+        // Edited here as well, so the arrival is kept alongside as a copy.
+        phone.payload.entries[0].secret = "edited here"
+        phone.payload.entries[0].modifiedAt = later(30)
+
+        let outcome = try await phone.syncNow()
+
+        XCTAssertEqual(outcome.conflicts, 1)
+        XCTAssertEqual(phone.payload.entries.count, 2)
+        for entry in phone.payload.entries {
+            XCTAssertNil(entry.groupID, "\(entry.name) is filed under a group that is not in the vault")
+        }
+    }
+
+    /// Both devices rename the same group, and the vault's dates are whole
+    /// seconds, so the two versions carry the same timestamp. "Newer wins"
+    /// cannot separate them — each device would keep its own, push it, and be
+    /// handed the other's back, for ever.
+    func testGroupsRenamedInTheSameSecondOnBothDevicesSettle() async throws {
+        let server = CloudServer()
+        var mac = Device(server: server, dek: dek, payload: VaultPayload(groups: [WalletGroup(name: "Savings", chain: .evm)]))
+        var phone = Device(server: server, dek: dek)
+        try await mac.syncNow()
+        try await phone.syncNow()
+
+        mac.payload.groups[0].name = "Long term"
+        phone.payload.groups[0].name = "Cold"
+        XCTAssertEqual(
+            mac.payload.groups[0].modifiedAt,
+            phone.payload.groups[0].modifiedAt,
+            "the point of the test is that the clocks agree"
+        )
+
+        for _ in 0..<3 {
+            try await mac.syncNow()
+            try await phone.syncNow()
+        }
+
+        XCTAssertEqual(
+            mac.payload.groups.map(\.name),
+            phone.payload.groups.map(\.name),
+            "the two devices are still disagreeing about the name"
+        )
+        let settledMac = try await mac.syncNow()
+        let settledPhone = try await phone.syncNow()
+        XCTAssertEqual(settledMac.pushed, 0, "the Mac is still rewriting the group on every sync")
+        XCTAssertEqual(settledPhone.pushed, 0, "the phone is still rewriting the group on every sync")
+        XCTAssertFalse(settledMac.changedLocally)
+        XCTAssertFalse(settledPhone.changedLocally)
     }
 
     // MARK: - Conflicts
