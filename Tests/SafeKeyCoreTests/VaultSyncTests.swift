@@ -537,3 +537,29 @@ final class GroupSyncTests: XCTestCase {
         XCTAssertNil(payload.entries.first?.groupID)
     }
 }
+
+/// The one part of the CloudKit backend that can be checked without CloudKit.
+final class CloudKitBatchingTests: XCTestCase {
+    /// A vault with more wallets than one request may carry has to reach
+    /// iCloud in pieces — all of it, once each, in order.
+    func testEveryRecordIsSentExactlyOnce() {
+        let items = Array(0..<1_000)
+        let batches = CloudKitSyncBackend.batches(items)
+
+        XCTAssertEqual(batches.flatMap { $0 }, items)
+        XCTAssertTrue(
+            batches.allSatisfy { $0.count <= CloudKitSyncBackend.batchLimit },
+            "a batch went over the limit that made batching necessary"
+        )
+    }
+
+    func testSmallAndEmptyCasesAreNotSplit() {
+        XCTAssertTrue(CloudKitSyncBackend.batches([Int]()).isEmpty)
+        XCTAssertEqual(CloudKitSyncBackend.batches([1, 2, 3]).count, 1)
+        XCTAssertEqual(
+            CloudKitSyncBackend.batches(Array(0..<CloudKitSyncBackend.batchLimit)).count,
+            1,
+            "exactly one full batch must not become two"
+        )
+    }
+}

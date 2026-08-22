@@ -46,10 +46,10 @@ final class SyncConvergenceTests: XCTestCase {
 
     // MARK: - One scenario
 
-    private func runScenario(seed: UInt64, steps: Int, wipes: Bool) async throws {
+    private func runScenario(seed: UInt64, steps: Int, wipes: Bool, devices deviceCount: Int = 3) async throws {
         var random = SeededGenerator(seed: seed)
         let server = CloudServer()
-        var devices = (0..<3).map { _ in Device(server: server, dek: dek) }
+        var devices = (0..<deviceCount).map { _ in Device(server: server, dek: dek) }
         // Distinct, ordered dates without sleeping. Some steps reuse the
         // previous one on purpose: vault dates are whole seconds, so edits
         // sharing a timestamp are ordinary, not exotic.

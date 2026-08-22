@@ -177,6 +177,25 @@ final class TwoDeviceSyncTests: XCTestCase {
         XCTAssertNotNil(state.token)
     }
 
+    /// A vault far past the size of a single CloudKit request still crosses
+    /// intact. The batching itself lives in the backend, but nothing in the
+    /// engine above it may assume a small vault either.
+    func testALargeVaultReachesTheOtherDevice() async throws {
+        let server = CloudServer()
+        let many = (0..<500).map { entry("Wallet \($0)", secret: "secret-\($0)") }
+        var mac = Device(server: server, dek: dek, payload: VaultPayload(entries: many))
+        var phone = Device(server: server, dek: dek)
+
+        let pushed = try await mac.syncNow()
+        XCTAssertEqual(pushed.pushed, 500)
+        try await phone.syncNow()
+
+        XCTAssertEqual(phone.payload.entries.count, 500)
+        XCTAssertEqual(Set(phone.payload.entries.map(\.secret)).count, 500, "no wallet may arrive as a copy of another")
+        let settled = try await phone.syncNow()
+        XCTAssertFalse(settled.changedLocally)
+    }
+
     // MARK: - Groups
 
     func testGroupRenameReachesTheOtherDevice() async throws {

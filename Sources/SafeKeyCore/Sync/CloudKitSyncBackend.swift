@@ -184,6 +184,18 @@ public actor CloudKitSyncBackend: CloudBackend {
         }
     }
 
+    /// CloudKit refuses a modify request past a few hundred items. A vault
+    /// with more wallets than that would fail its first sync outright — and
+    /// again after any zone reset, which re-sends everything — so requests go
+    /// up in batches. Kept well under the limit rather than at it.
+    static let batchLimit = 300
+
+    static func batches<T>(_ items: [T]) -> [[T]] {
+        stride(from: 0, to: items.count, by: batchLimit).map {
+            Array(items[$0..<min($0 + batchLimit, items.count)])
+        }
+    }
+
     public func save(_ records: [SyncRecord]) async throws {
         let ckRecords = records.map { record -> CKRecord in
             let id = CKRecord.ID(recordName: record.id, zoneID: zoneID)
@@ -195,8 +207,10 @@ public actor CloudKitSyncBackend: CloudBackend {
         }
         // Last writer wins at the record level; the engine above has already
         // decided which version that should be, and kept the loser.
-        try await withZone {
-            _ = try await database.modifyRecords(saving: ckRecords, deleting: [], savePolicy: .allKeys)
+        for batch in Self.batches(ckRecords) {
+            try await withZone {
+                _ = try await database.modifyRecords(saving: batch, deleting: [], savePolicy: .allKeys)
+            }
         }
     }
 
@@ -204,8 +218,10 @@ public actor CloudKitSyncBackend: CloudBackend {
         guard !ids.isEmpty else { return }
         let recordIDs = ids.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
         do {
-            try await withZone {
-                _ = try await database.modifyRecords(saving: [], deleting: recordIDs)
+            for batch in Self.batches(recordIDs) {
+                try await withZone {
+                    _ = try await database.modifyRecords(saving: [], deleting: batch)
+                }
             }
         } catch let error as CKError where error.code == .unknownItem {
             // Already gone is the outcome we wanted. Deletions are re-sent
