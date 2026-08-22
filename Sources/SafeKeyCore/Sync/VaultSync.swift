@@ -435,6 +435,11 @@ public struct VaultSync: Sendable {
         }
 
         var payload = VaultPayload()
+        // A vault fetched through sync is, by definition, a vault this device
+        // syncs. Leaving the switch at its default would strand the device it
+        // just joined with: everything would be there once, and nothing would
+        // ever arrive again.
+        payload.settings.cloudSyncEnabled = true
         var state = State()
         let changes = try await backend.fetchChanges(since: nil)
         for record in changes.records {

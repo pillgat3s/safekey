@@ -86,10 +86,14 @@ final class SyncCoordinatorTests: XCTestCase {
         let probe: ConcurrencyProbe
     }
 
-    private func makeVault(entries: [WalletEntry], syncEnabled: Bool = true) throws -> Vault.Unlocked {
+    private func makeVault(
+        entries: [WalletEntry],
+        syncEnabled: Bool = true,
+        password: String = "correct-horse-1"
+    ) throws -> Vault.Unlocked {
         var payload = VaultPayload(entries: entries)
         payload.settings.cloudSyncEnabled = syncEnabled
-        return try Vault.create(password: "correct-horse-1", payload: payload, iterations: 1_000).1
+        return try Vault.create(password: password, payload: payload, iterations: 1_000).1
     }
 
     private func makeRig(
@@ -314,6 +318,86 @@ final class SyncCoordinatorTests: XCTestCase {
         guard case .idle = rig.coordinator.status else {
             return XCTFail("expected an idle status, got \(rig.coordinator.status)")
         }
+    }
+
+    // MARK: - Two vaults becoming one
+
+    /// The flow a second device actually goes through: it already holds its
+    /// own vault, iCloud holds another, and the user merges rather than
+    /// choosing which one to lose. Afterwards there is one vault and one
+    /// password — the one belonging to the device where the merge was started
+    /// — and both devices carry on in step.
+    func testMergingTwoVaultsLeavesOneVaultAndBothDevicesInStep() async throws {
+        let server = CloudServer()
+        let macPassword = "mac-password-1"
+        let phonePassword = "phone-password-2"
+
+        // The Mac has been syncing its vault for a while.
+        let mac = try makeRig(
+            server: server,
+            vault: try makeVault(entries: [entry("Mac wallet")], password: macPassword),
+            directory: directory.appendingPathComponent("mac", isDirectory: true)
+        )
+        await mac.coordinator.syncIfEnabled(session: mac.session)
+
+        // The phone has its own, with its own wallets, and finds the account
+        // occupied. Nothing of the Mac's may be touched by that discovery.
+        var phone = try makeRig(
+            server: server,
+            vault: try makeVault(entries: [entry("Phone wallet")], password: phonePassword),
+            directory: directory.appendingPathComponent("phone", isDirectory: true)
+        )
+        await phone.coordinator.syncIfEnabled(session: phone.session)
+        XCTAssertEqual(phone.coordinator.status, .differentVault)
+        let untouched = await server.fetchVault()
+        XCTAssertEqual(untouched?.vaultID, mac.session.header.vaultID)
+
+        // The user is shown what merging would add before agreeing to it.
+        let (merged, adopted) = try await phone.coordinator.previewCloudMerge(
+            password: macPassword,
+            into: phone.session.unlocked
+        )
+        XCTAssertEqual(adopted, 1, "the Mac's wallet is the one that would be taken on")
+        XCTAssertEqual(phone.session.entries.count, 1, "previewing must not change anything yet")
+
+        try await phone.session.adopt(merged)
+        await phone.coordinator.takeOverCloudVault(session: phone.session)
+
+        XCTAssertEqual(
+            Set(phone.session.entries.map(\.name)),
+            ["Phone wallet", "Mac wallet"],
+            "merging keeps both sides"
+        )
+        let takenOver = await server.fetchVault()
+        XCTAssertEqual(takenOver?.vaultID, phone.session.header.vaultID)
+
+        // The Mac now finds a vault it cannot open — its own password no
+        // longer applies — and joins with the phone's.
+        await mac.coordinator.syncIfEnabled(session: mac.session)
+        XCTAssertEqual(mac.coordinator.status, .differentVault)
+
+        let (rejoined, _) = try await mac.coordinator.fetchCloudVault(password: phonePassword)
+        XCTAssertEqual(rejoined.header.vaultID, phone.session.header.vaultID)
+        XCTAssertEqual(
+            Set(rejoined.payload.entries.map(\.name)),
+            ["Phone wallet", "Mac wallet"],
+            "the Mac gets both wallets back, under the surviving password"
+        )
+
+        // And from there the two are ordinary devices on one vault again.
+        let store = VaultStore(directory: directory.appendingPathComponent("mac", isDirectory: true))
+        let rejoinedSession = VaultSession(unlocked: rejoined, store: store)
+        mac.coordinator.attach(to: rejoinedSession)
+        rejoinedSession.upsert(entry("Added after the merge"))
+        await mac.coordinator.syncIfEnabled(session: rejoinedSession)
+        await phone.coordinator.syncIfEnabled(session: phone.session)
+
+        XCTAssertEqual(
+            Set(phone.session.entries.map(\.name)),
+            ["Phone wallet", "Mac wallet", "Added after the merge"]
+        )
+        let quiet = await phone.coordinator.syncIfEnabled(session: phone.session)
+        XCTAssertEqual(quiet?.changedLocally, false)
     }
 
     // MARK: - Switched off

@@ -463,6 +463,25 @@ final class TwoDeviceSyncTests: XCTestCase {
         XCTAssertEqual(outcome.pushed, 0)
     }
 
+    /// A device that joined by pulling the vault out of iCloud is syncing by
+    /// definition. Landing with the switch off would strand it: everything
+    /// arrives once, and nothing ever arrives again.
+    func testJoiningLeavesSyncSwitchedOn() async throws {
+        let server = CloudServer()
+        let password = "correct-horse-battery-3"
+        let (_, vault) = try Vault.create(password: password, iterations: 1_000)
+        var mac = Device(server: server, dek: vault.dek, payload: VaultPayload(entries: [entry("Ledger")]))
+        try await mac.sync.publishVault(header: vault.header)
+        try await mac.syncNow()
+
+        let joined = try await VaultSync.adoptRemoteVault(
+            backend: DeviceBackend(server: server),
+            password: password
+        )
+
+        XCTAssertTrue(joined.unlocked.payload.settings.cloudSyncEnabled)
+    }
+
     // MARK: - Recovering from a wiped zone
 
     /// "Replace the iCloud copy" deletes the zone. The other device is then
