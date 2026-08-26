@@ -1,8 +1,26 @@
 import SwiftUI
 import SafeKeyCore
 
+/// Refuses third-party keyboard extensions for the whole app, the way Apple's
+/// own Passwords app does.
+///
+/// A custom keyboard is an app that sees every keystroke, and a vault is the
+/// one place a typed seed phrase must not pass through someone else's code.
+/// iOS only enforces the system keyboard by itself for secure fields, and a
+/// multi-line seed editor cannot be one — so the app declines the extension
+/// point outright and every field gets Apple's keyboard.
+final class KeyboardPolicyDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        shouldAllowExtensionPointIdentifier identifier: UIApplication.ExtensionPointIdentifier
+    ) -> Bool {
+        identifier != .keyboard
+    }
+}
+
 @main
 struct SafeKeyApp: App {
+    @UIApplicationDelegateAdaptor(KeyboardPolicyDelegate.self) private var keyboardPolicy
     @State private var model = AppModel.forCurrentLaunch()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -36,6 +54,7 @@ struct SafeKeyApp: App {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         switch model.state {
@@ -46,7 +65,15 @@ struct RootView: View {
         case .locked:
             LockScreenView()
         case .unlocked(let session):
-            VaultHomeView(session: session)
+            // iPad gets the sidebar layout the Passwords app uses there; a
+            // compact width — every iPhone, and iPad slide-over — gets the
+            // tile home screen. Driven by size class rather than device so
+            // multitasking picks the right one on its own.
+            if horizontalSizeClass == .regular {
+                VaultSplitView(session: session)
+            } else {
+                VaultHomeView(session: session)
+            }
         }
     }
 }

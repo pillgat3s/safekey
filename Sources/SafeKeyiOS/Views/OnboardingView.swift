@@ -43,13 +43,17 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
 
                 VStack(spacing: 10) {
+                    // No textContentType on purpose: `.newPassword` summons
+                    // the system's strong-password overlay, which offers to
+                    // put the master password into iCloud Keychain — the one
+                    // place it must never live, being the key to a vault that
+                    // may itself sync through iCloud. Apple's Passwords app
+                    // does not autofill its own gate either.
                     SecureField("Master password", text: $password)
                         .accessibilityIdentifier("onboarding.password")
-                        .textContentType(.newPassword)
                     PasswordStrengthMeter(password: password)
                     SecureField("Confirm password", text: $confirmation)
                         .accessibilityIdentifier("onboarding.confirm")
-                        .textContentType(.newPassword)
                     if !confirmation.isEmpty, confirmation != password {
                         Text("Passwords don't match")
                             .font(.caption)

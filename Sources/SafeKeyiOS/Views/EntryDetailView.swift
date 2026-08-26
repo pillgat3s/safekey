@@ -34,10 +34,38 @@ struct EntryDetailView: View {
                         .listRowSeparator(.hidden)
                     }
 
-                    // Tapping the secret opens a menu with copy and reveal,
-                    // rather than parking two buttons under the value.
-                    Section(entry.kind.shortName) {
-                        Menu {
+                    // The secret, presented the way the Passwords app presents
+                    // a password: a captioned row of dots that reveals in place
+                    // when tapped, hides when tapped again, and carries Copy on
+                    // a long press. No menu between you and the value.
+                    Section {
+                        Button {
+                            toggleReveal(entry)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(entry.kind.shortName)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                if revealed, entry.kind.isSeedPhrase {
+                                    SeedPhraseGrid(phrase: entry.secret)
+                                } else if revealed {
+                                    Text(entry.secret)
+                                        .font(.callout.monospaced())
+                                        .accessibilityIdentifier("detail.secret")
+                                } else {
+                                    // A fixed run of dots: the mask must not
+                                    // leak the secret's length.
+                                    Text(String(repeating: "•", count: 8))
+                                        .font(.body.monospaced())
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("detail.secretRow")
+                        .contextMenu {
                             Button {
                                 copy(entry.secret, label: "\(entry.kind.shortName) copied")
                             } label: {
@@ -48,13 +76,6 @@ struct EntryDetailView: View {
                             } label: {
                                 Label(revealed ? "Hide" : "Reveal", systemImage: revealed ? "eye.slash" : "eye")
                             }
-                        } label: {
-                            secretValue(for: entry)
-                        }
-                        .accessibilityIdentifier("detail.secretRow")
-
-                        if revealed, entry.kind.isSeedPhrase {
-                            SeedPhraseGrid(phrase: entry.secret)
                         }
                     }
 
@@ -172,26 +193,6 @@ struct EntryDetailView: View {
             } else {
                 ContentUnavailableView("Wallet Deleted", systemImage: "trash")
             }
-        }
-    }
-
-    /// Dots until revealed; the value itself once it is.
-    @ViewBuilder
-    private func secretValue(for entry: WalletEntry) -> some View {
-        if revealed, !entry.kind.isSeedPhrase {
-            Text(entry.secret)
-                .font(.callout.monospaced())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("detail.secret")
-        } else if revealed {
-            Text("Tap to hide")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text(String(repeating: "•", count: 16))
-                .font(.callout.monospaced())
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

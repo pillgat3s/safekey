@@ -28,6 +28,7 @@ opens on the other.
 | **On screen** | macOS: `NSWindow.sharingType = .none` hides windows from screenshots and recordings. iOS: screenshots cannot be blocked by any app, but while the screen is being recorded, mirrored, or streamed, reveal is refused and anything revealed hides itself |
 | **In memory** | Locking drops the session so ARC releases the secrets; auto-lock on sleep, screen lock, and inactivity |
 | **Clipboard** | Copied secrets are marked concealed and auto-cleared, but only if you haven't copied something newer |
+| **Keyboard** | iOS refuses third-party keyboard extensions app-wide — a custom keyboard is someone else's code seeing every keystroke, so only Apple's keyboard ever gets one. Same policy as Apple's Passwords app |
 | **iCloud sync** | Off by default. Each wallet is sealed under the vault's data key *before* it is uploaded, so iCloud holds an opaque blob, a date and a vault id — never a name, a chain, or a secret |
 | **Logs** | `WalletEntry.debugDescription` is redacted; state restoration and sudden termination are disabled so no window snapshot ever hits disk |
 

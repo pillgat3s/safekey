@@ -50,7 +50,7 @@ final class ScreenshotTourUITests: XCTestCase {
         try? shot.pngRepresentation.write(to: outputDirectory.appendingPathComponent("\(name).png"))
     }
 
-    func testTourEveryScreen() {
+    func testTourEveryScreen() throws {
         app.launchArguments = ["--uitest", "--uitest-reset"]
         app.launch()
 
@@ -87,6 +87,12 @@ final class ScreenshotTourUITests: XCTestCase {
         capture("04-home-with-wallets")
 
         // 3. The list one level down
+        // The tour walks the iPhone tile home; the iPad split view has its
+        // own layout and is covered by the flow tests.
+        try XCTSkipUnless(
+            app.buttons["tile.All"].waitForExistence(timeout: 5),
+            "tile home not present — iPad layout"
+        )
         let tile = app.buttons["tile.All"]
         XCTAssertTrue(tile.waitForExistence(timeout: timeout))
         tile.tap()
@@ -99,7 +105,6 @@ final class ScreenshotTourUITests: XCTestCase {
         XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
         capture("05-detail-masked")
         secretRow.tap()
-        app.buttons["Reveal"].tap()
         XCTAssertTrue(app.staticTexts["abandon"].waitForExistence(timeout: timeout))
         capture("06-detail-revealed")
         app.navigationBars.buttons.element(boundBy: 0).tap()

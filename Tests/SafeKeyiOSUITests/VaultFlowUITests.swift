@@ -60,19 +60,18 @@ final class VaultFlowUITests: XCTestCase {
         dismissWelcome()
         let password = app.secureTextFields["onboarding.password"]
         XCTAssertTrue(password.waitForExistence(timeout: timeout), "onboarding never appeared", file: file, line: line)
-        password.tap()
-        password.typeText(masterPassword)
+        type(masterPassword, into: password)
 
         let confirm = app.secureTextFields["onboarding.confirm"]
-        confirm.tap()
-        confirm.typeText(masterPassword)
+        type(masterPassword, into: confirm)
 
         app.buttons["Create Vault"].tap()
-        XCTAssertTrue(
-            app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout),
-            "vault creation did not land on the empty list",
-            file: file, line: line
-        )
+        // The iPhone lands on the tile home; an iPad lands on the split view,
+        // whose preselected All list shows its own empty state.
+        let landed = app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout)
+            || app.staticTexts["Nothing Here"].waitForExistence(timeout: timeout)
+        if !landed { captureScreen("landing-debug") }
+        XCTAssertTrue(landed, "vault creation did not land on an empty vault", file: file, line: line)
         declineBiometricOffer()
     }
 
@@ -83,24 +82,44 @@ final class VaultFlowUITests: XCTestCase {
 
         let nameField = app.textFields["entry.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: timeout))
-        nameField.tap()
-        nameField.typeText(name)
+        type(name, into: nameField)
 
         app.buttons[seedPhrase ? "Seed Phrase" : "Private Key"].tap()
 
         let editor = app.textViews["entry.secret"]
         XCTAssertTrue(editor.waitForExistence(timeout: timeout))
         editor.tap()
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
         editor.typeText(secret)
 
         app.buttons["Save"].tap()
     }
 
     /// Wallets live one level below the home screen now: open the "All" tile.
+    /// Taps the field, waits for the keyboard to actually connect, and only
+    /// then types. On an iPad, `typeText` straight after `tap()` races the
+    /// keyboard attach and silently drops leading characters — which in a
+    /// password field looks like nothing at all until the mismatch error.
+    private func type(_ text: String, into field: XCUIElement) {
+        field.tap()
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
+        field.typeText(text)
+    }
+
     private func openAll() {
+        // iPhone: the All tile on the home grid. iPad: the split view already
+        // shows the All list — its sidebar row exists, the tile does not.
         let tile = app.buttons["tile.All"]
-        XCTAssertTrue(tile.waitForExistence(timeout: timeout))
-        tile.tap()
+        if tile.waitForExistence(timeout: 3) {
+            tile.tap()
+        } else {
+            // The list titles itself with a principal toolbar view, so the
+            // nav bar carries no name — the "All" text itself is the probe.
+            XCTAssertTrue(
+                app.staticTexts["All"].waitForExistence(timeout: timeout),
+                "neither the All tile nor the All list is on screen"
+            )
+        }
     }
 
     private func lock() {
@@ -156,21 +175,22 @@ final class VaultFlowUITests: XCTestCase {
 
         let secretRow = app.buttons["detail.secretRow"]
         XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
+        captureScreen("reveal-1-masked")
 
         let revealed = app.staticTexts["detail.secret"]
         XCTAssertFalse(revealed.exists, "the secret must not render before Reveal")
 
-        // Copy and Reveal live in a menu on the row itself now.
+        // The row reveals in place on a tap and hides on the next, the way
+        // the Passwords app treats a password. Copy lives on a long press.
         secretRow.tap()
-        app.buttons["Reveal"].tap()
-        XCTAssertTrue(revealed.waitForExistence(timeout: timeout), "Reveal did not show the secret")
-        XCTAssertEqual(revealed.label, secret, "Reveal showed something other than the stored secret")
+        XCTAssertTrue(revealed.waitForExistence(timeout: timeout), "tapping the row did not reveal the secret")
+        captureScreen("reveal-2-revealed")
+        XCTAssertEqual(revealed.label, secret, "the row revealed something other than the stored secret")
 
         secretRow.tap()
-        app.buttons["Hide"].tap()
         XCTAssertFalse(
             app.staticTexts["detail.secret"].waitForExistence(timeout: 3),
-            "Hide did not re-mask the secret"
+            "tapping again did not re-mask the secret"
         )
     }
 
@@ -183,6 +203,7 @@ final class VaultFlowUITests: XCTestCase {
         lock()
 
         lockPasswordField.tap()
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
         lockPasswordField.typeText(masterPassword + "\n")
 
         openAll()
@@ -198,6 +219,7 @@ final class VaultFlowUITests: XCTestCase {
         lock()
 
         lockPasswordField.tap()
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
         lockPasswordField.typeText("not-the-password\n")
 
         XCTAssertTrue(
@@ -221,6 +243,7 @@ final class VaultFlowUITests: XCTestCase {
             "a relaunch must come up locked, not onboarding"
         )
         lockPasswordField.tap()
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
         lockPasswordField.typeText(masterPassword + "\n")
 
         openAll()

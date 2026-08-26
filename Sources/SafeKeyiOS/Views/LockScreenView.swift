@@ -60,7 +60,6 @@ struct LockScreenView: View {
                 SecureField("Master password", text: $password)
                     .accessibilityIdentifier("lock.password")
                     .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
                     .submitLabel(.go)
                     .focused($passwordFocused)
                     .onSubmit(unlock)
