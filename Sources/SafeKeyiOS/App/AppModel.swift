@@ -13,7 +13,10 @@ import SafeKeyCore
 /// - **App disguise** — the sandbox forbids an app rewriting its own bundle,
 ///   and a concealment feature is a poor fit for App Store review. Alternate
 ///   app icons are the sanctioned equivalent if wanted later.
-/// - **Screen-capture blocking** — handled differently on iOS.
+/// - **Screen-capture blocking** — a Mac window can exclude itself from
+///   capture; iOS has no equivalent for screenshots. Ongoing recording and
+///   mirroring *are* observable, and revealed secrets hide while one runs —
+///   see `ScreenCapture`.
 ///
 /// Everything security-critical comes from `SafeKeyCore`, which is the same
 /// audited source the Mac app compiles.

@@ -7,6 +7,7 @@ struct EntryDetailView: View {
     let entryID: WalletEntry.ID
 
     @State private var revealed = false
+    private let capture = ScreenCapture.shared
     @State private var isEditing = false
     @State private var notice: String?
     @State private var creatingGroup = false
@@ -159,6 +160,15 @@ struct EntryDetailView: View {
                     }
                 }
                 .onDisappear { revealed = false }
+                // Recording, mirroring, and streaming are the ways a revealed
+                // secret leaves the device unnoticed. Re-hide the moment one
+                // starts; reveal is also refused while one is running.
+                .onChange(of: capture.isCaptured) { _, captured in
+                    if captured, revealed {
+                        revealed = false
+                        show("Hidden — the screen is being recorded or mirrored")
+                    }
+                }
             } else {
                 ContentUnavailableView("Wallet Deleted", systemImage: "trash")
             }
@@ -203,6 +213,8 @@ struct EntryDetailView: View {
     private func toggleReveal(_ entry: WalletEntry) {
         if revealed {
             revealed = false
+        } else if capture.isCaptured {
+            show("Unavailable while the screen is recorded or mirrored")
         } else {
             Task {
                 if await session.authorizeReveal() {

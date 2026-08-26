@@ -6,22 +6,27 @@ extension VaultSettings {
     ///
     /// Lives here rather than in either app so the Mac list and the iPhone
     /// list cannot drift into sorting the same vault differently.
+    ///
+    /// Descending swaps the operands rather than negating the result. Negation
+    /// answers "yes, first comes before second" for two *equal* elements — and
+    /// ties are ordinary here, because vault dates are whole seconds — which is
+    /// not a valid ordering: Swift's sort may reorder equal rows arbitrarily on
+    /// every pass, and is entitled to trap on it.
     func sorted(_ entries: [WalletEntry]) -> [WalletEntry] {
         let descending = effectiveSortDescending
-        return entries.sorted { first, second in
-            let ascending: Bool
+        return entries.sorted { lhs, rhs in
+            let (first, second) = descending ? (rhs, lhs) : (lhs, rhs)
             switch sortOrder {
             case .dateModified:
-                ascending = first.modifiedAt < second.modifiedAt
+                return first.modifiedAt < second.modifiedAt
             case .dateCreated:
-                ascending = first.createdAt < second.createdAt
+                return first.createdAt < second.createdAt
             case .name:
-                ascending = first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
+                return first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
             case .chain:
-                ascending = first.chain.displayName.localizedCaseInsensitiveCompare(second.chain.displayName)
+                return first.chain.displayName.localizedCaseInsensitiveCompare(second.chain.displayName)
                     == .orderedAscending
             }
-            return descending ? !ascending : ascending
         }
     }
 

@@ -152,7 +152,11 @@ struct EntryListView: View {
                 entryPendingDeletion = nil
             }
         } message: {
-            Text("This removes the secret from the vault permanently.")
+            Text(
+                session.settings.cloudSyncEnabled
+                    ? "This removes the secret from this iPhone, from iCloud, and from your other devices. There is no undo."
+                    : "This removes the secret from the vault permanently. There is no undo."
+            )
         }
     }
 

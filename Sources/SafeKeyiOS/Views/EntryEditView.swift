@@ -22,6 +22,34 @@ struct EntryEditView: View {
     @State private var derivationError: String?
     @State private var isDeriving = false
     @State private var derivationPassphrase = ""
+    @State private var baseline: Snapshot?
+    @State private var confirmingDiscard = false
+
+    /// Everything the Save button would write, for telling "opened and looked"
+    /// apart from "typed half a seed phrase".
+    private struct Snapshot: Equatable {
+        var name: String
+        var chain: Chain
+        var isSeedPhrase: Bool
+        var secret: String
+        var publicAddress: String
+        var notes: String
+        var tagsText: String
+        var favorite: Bool
+        var groupID: UUID?
+    }
+
+    private var snapshot: Snapshot {
+        Snapshot(
+            name: name, chain: chain, isSeedPhrase: isSeedPhrase, secret: secret,
+            publicAddress: publicAddress, notes: notes, tagsText: tagsText,
+            favorite: favorite, groupID: groupID
+        )
+    }
+
+    private var hasUnsavedChanges: Bool {
+        baseline.map { $0 != snapshot } ?? false
+    }
 
     private var wordCount: Int {
         secret.split(whereSeparator: \.isWhitespace).count
@@ -166,7 +194,13 @@ struct EntryEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        if hasUnsavedChanges {
+                            confirmingDiscard = true
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }.disabled(!canSave)
@@ -188,6 +222,17 @@ struct EntryEditView: View {
                 Text("Groups organise wallets within \(chain.displayName).")
             }
             .onAppear(perform: populate)
+            // Half a typed seed phrase is real work; one stray swipe must not
+            // discard it silently. Dismissing with edits pending asks first.
+            .interactiveDismissDisabled(hasUnsavedChanges)
+            .confirmationDialog(
+                "Discard this wallet's changes?",
+                isPresented: $confirmingDiscard,
+                titleVisibility: .visible
+            ) {
+                Button("Discard Changes", role: .destructive) { dismiss() }
+                Button("Keep Editing", role: .cancel) {}
+            }
         }
     }
 
@@ -214,6 +259,9 @@ struct EntryEditView: View {
     }
 
     private func populate() {
+        // The baseline is taken after the fields are filled, so for an existing
+        // wallet "unchanged" means "as it was", not "empty".
+        defer { baseline = snapshot }
         guard let existing else {
             chain = session.settings.defaultChain
             return

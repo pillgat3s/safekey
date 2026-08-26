@@ -19,6 +19,8 @@ struct SecuritySettingsView: View {
     @State private var errorMessage: String?
     @State private var infoMessage: String?
     @State private var pendingRestore: (data: Data, header: VaultHeader)?
+    @State private var showingReplaceCloud = false
+    @State private var showingRemoveSync = false
 
     var body: some View {
         Form {
@@ -111,7 +113,7 @@ struct SecuritySettingsView: View {
                         Text(syncStatusText).foregroundStyle(.secondary)
                     }
                     if model.sync.status == .differentVault {
-                        Text("iCloud holds a different vault — one created separately from this device's, so its wallets are sealed with a key this device does not have. Using the same master password on both does not make them the same vault.\n\nTo put this device's wallets everywhere: replace the iCloud copy, then restore this device's backup on the other one.\n\nTo keep the other device's wallets instead: export a backup there and restore it here — do not replace.")
+                        Text("iCloud holds a different vault — one created separately from this Mac's, so its wallets are sealed with a key this Mac does not have.\n\nMerge keeps both sides: its wallets are added to this vault, re-encrypted under this vault's master password. Use the iCloud Vault replaces what is on this Mac with it. Replace erases the iCloud copy and puts this vault there instead.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         HStack {
@@ -131,7 +133,7 @@ struct SecuritySettingsView: View {
                                 showingAdopt = true
                             }
                             Button("Replace iCloud Copy with This Vault") {
-                                Task { await model.sync.replaceCloudCopy(session: session) }
+                                showingReplaceCloud = true
                             }
                         }
                     }
@@ -140,12 +142,7 @@ struct SecuritySettingsView: View {
                             Task { await model.sync.syncIfEnabled(session: session) }
                         }
                         Button("Stop Syncing and Remove Copy") {
-                            Task {
-                                await model.sync.removeFromCloud(session: session)
-                                var settings = session.settings
-                                settings.cloudSyncEnabled = false
-                                session.updateSettings(settings)
-                            }
+                            showingRemoveSync = true
                         }
                     }
                 }
@@ -212,6 +209,33 @@ struct SecuritySettingsView: View {
         }
         .sheet(isPresented: $showingDeviceKeyDisable) {
             DeviceKeyDisableView()
+        }
+        .confirmationDialog(
+            "Replace the iCloud copy?",
+            isPresented: $showingReplaceCloud,
+            titleVisibility: .visible
+        ) {
+            Button("Replace", role: .destructive) {
+                Task { await model.sync.replaceCloudCopy(session: session) }
+            }
+        } message: {
+            Text("iCloud holds a different vault, and replacing erases its copy there for good. If it has wallets you want to keep, cancel and choose “Merge with the iCloud Vault” instead — merging keeps both sides. Your other device keeps its own local copy and is offered the same choices the next time it syncs.")
+        }
+        .confirmationDialog(
+            "Stop syncing and remove the iCloud copy?",
+            isPresented: $showingRemoveSync,
+            titleVisibility: .visible
+        ) {
+            Button("Remove from iCloud", role: .destructive) {
+                Task {
+                    await model.sync.removeFromCloud(session: session)
+                    var settings = session.settings
+                    settings.cloudSyncEnabled = false
+                    session.updateSettings(settings)
+                }
+            }
+        } message: {
+            Text("The wallets on this Mac are kept. Only the copy in iCloud is deleted, and your other devices stop receiving changes.")
         }
         .alert("Security Settings", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}

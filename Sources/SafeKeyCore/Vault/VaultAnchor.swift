@@ -175,6 +175,7 @@ public struct VaultAnchorStore: Sendable {
         else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? payload.write(to: mirrorURL, options: [.atomic])
+        VaultStore.protectAtRest(mirrorURL)
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: mirrorURL.path)
     }
 

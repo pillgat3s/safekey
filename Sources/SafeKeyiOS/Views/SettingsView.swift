@@ -220,7 +220,7 @@ struct SettingsView: View {
                     Task { await model.sync.replaceCloudCopy(session: session) }
                 }
             } message: {
-                Text("iCloud holds a different vault — one created separately from this device's, so its wallets are sealed with a key this device does not have. Using the same master password on both does not make them the same vault.\n\nTo put this device's wallets everywhere: replace the iCloud copy, then restore this device's backup on the other one.\n\nTo keep the other device's wallets instead: export a backup there and restore it here — do not replace.")
+                Text("iCloud holds a different vault, and replacing erases its copy there for good.\n\nIf that vault has wallets you want to keep, cancel and choose “Merge with the iCloud Vault” instead — merging keeps both sides.\n\nAfter replacing, your other device keeps its own local copy and will be offered these same choices the next time it syncs.")
             }
             .confirmationDialog(
                 "Stop syncing and remove the iCloud copy?",

@@ -106,6 +106,13 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # An iPad app that supports multitasking must list all four; App Store
+        # validation rejects the upload otherwise. iPhone keeps its three.
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
 
   SafeKeyCoreTests:
     type: bundle.unit-test
@@ -153,6 +160,7 @@ targets:
       - Tests/Support
       - Sources/SafeKeyShared/SyncCoordinator.swift
       - Sources/SafeKeyShared/VaultSession.swift
+      - Sources/SafeKeyShared/EntrySorting.swift
     dependencies:
       - target: SafeKeyCore_macOS
     settings:

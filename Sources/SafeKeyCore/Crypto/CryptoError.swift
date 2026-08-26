@@ -21,3 +21,29 @@ public enum VaultError: Error, Equatable, Sendable {
     case cryptoFailure
     case vaultNotFound
 }
+
+/// Real sentences for the cases that reach an alert. Without this, a caller
+/// showing `localizedDescription` prints "The operation couldn't be completed.
+/// (SafeKeyCore.VaultError error 6.)" — which in a vault reads like data loss.
+extension VaultError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .wrongPassword:
+            "Wrong password."
+        case .corruptVault:
+            "This file is damaged or is not a SafeKey vault."
+        case .unsupportedVersion:
+            "This vault was written by a newer version of SafeKey. Update the app to open it."
+        case .unsupportedKDF:
+            "This vault uses a protection method this version of SafeKey does not know."
+        case .tampered:
+            "The vault failed its integrity check — it was modified outside SafeKey."
+        case .deviceKeyRequired:
+            "This vault requires its USB security key."
+        case .cryptoFailure:
+            "A system encryption operation failed. Try again."
+        case .vaultNotFound:
+            "There is no vault on this device."
+        }
+    }
+}

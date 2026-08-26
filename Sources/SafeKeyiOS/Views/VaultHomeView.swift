@@ -402,16 +402,6 @@ struct VaultHomeView: View {
         .accessibilityIdentifier("home.section.\(title)")
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.top, 22)
-            .padding(.bottom, 6)
-    }
-
     private var rowDivider: some View {
         Divider().padding(.leading, 52)
     }

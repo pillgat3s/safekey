@@ -25,7 +25,7 @@ opens on the other.
 | **USB security key** | Optional second factor, cryptographically enforced: the data key is wrapped under `HKDF(passwordKEK ‖ deviceKey)`, so the right password without the stick cannot open the vault. Enabling it **rotates** the data key, so older backups plus the password cannot decrypt anything written afterwards |
 | **Self-destruct** | Optional. After N wrong passwords, deletes every wrapped copy of the key (both Keychain domains) and the vault file. Fires only under the *pinned* policy on an *unmodified* file, so no one can weaponize it against you. With iCloud sync on it erases **this device** — the copy in iCloud and on your other devices is deliberately left alone, or taking one device would be enough to destroy the vault everywhere |
 | **At rest** | Vault file is `0600`, written atomically (temp + rename), never partially written |
-| **On screen** | `NSWindow.sharingType = .none` hides windows from screenshots and screen recording |
+| **On screen** | macOS: `NSWindow.sharingType = .none` hides windows from screenshots and recordings. iOS: screenshots cannot be blocked by any app, but while the screen is being recorded, mirrored, or streamed, reveal is refused and anything revealed hides itself |
 | **In memory** | Locking drops the session so ARC releases the secrets; auto-lock on sleep, screen lock, and inactivity |
 | **Clipboard** | Copied secrets are marked concealed and auto-cleared, but only if you haven't copied something newer |
 | **iCloud sync** | Off by default. Each wallet is sealed under the vault's data key *before* it is uploaded, so iCloud holds an opaque blob, a date and a vault id — never a name, a chain, or a secret |

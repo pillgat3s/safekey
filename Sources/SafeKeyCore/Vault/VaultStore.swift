@@ -17,6 +17,24 @@ public actor VaultStore {
         }
     }
 
+    /// On iOS, puts a file into the CompleteUnlessOpen protection class:
+    /// unreadable while the device is locked, but a write already in flight
+    /// when the lock happens finishes instead of failing. The vault is sealed
+    /// by its own AES layer regardless — this adds the OS's at-rest layer on
+    /// top, the way a credential store is expected to sit.
+    ///
+    /// Per file rather than via the default-data-protection entitlement,
+    /// which would need a capability registered against the App ID.
+    /// Best-effort: the simulator and macOS have no such classes.
+    nonisolated static func protectAtRest(_ url: URL) {
+        #if os(iOS)
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUnlessOpen],
+            ofItemAtPath: url.path
+        )
+        #endif
+    }
+
     nonisolated public var vaultURL: URL {
         directory.appendingPathComponent(Self.vaultFileName)
     }
@@ -73,6 +91,7 @@ public actor VaultStore {
             throw error
         }
         try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: vaultURL.path)
+        Self.protectAtRest(vaultURL)
     }
 
     /// Whether the vault directory is held back from the device's iCloud/system
@@ -117,6 +136,7 @@ public actor VaultStore {
             [.posixPermissions: 0o600],
             ofItemAtPath: syncStateURL.path
         )
+        Self.protectAtRest(syncStateURL)
     }
 
     public func clearSyncState() {
@@ -138,6 +158,7 @@ public actor VaultStore {
         try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tmp.path)
         _ = try fm.replaceItemAt(rescueURL, withItemAt: tmp)
         try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: rescueURL.path)
+        Self.protectAtRest(rescueURL)
     }
 
     public func rescueCopy() -> Data? {
