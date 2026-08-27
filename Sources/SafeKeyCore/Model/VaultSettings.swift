@@ -35,6 +35,11 @@ public struct VaultSettings: Codable, Sendable, Equatable {
     /// so switching to a date field reads newest-first without the user having
     /// to flip it back every time.
     public var sortDescending: Bool?
+    /// Whether the Mac app's windows are excluded from screenshots, screen
+    /// recordings, and screen sharing. `nil` means the default, which is on —
+    /// a vault should need opting *into* being captured, not out. iOS ignores
+    /// it: iPhones cannot exclude an app from capture at all.
+    public var blockScreenCapture: Bool?
 
     /// The fixed categories on the home screen.
     public enum HomeTile: String, Codable, Sendable, Equatable, CaseIterable {
@@ -93,7 +98,8 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         hiddenHomeTiles: [HomeTile] = [],
         chainOrder: [Chain] = [],
         sortDescending: Bool? = nil,
-        cloudSyncEnabled: Bool = false
+        cloudSyncEnabled: Bool = false,
+        blockScreenCapture: Bool? = nil
     ) {
         self.autoLockSeconds = autoLockSeconds
         self.lockOnSleep = lockOnSleep
@@ -108,6 +114,7 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         self.chainOrder = chainOrder
         self.sortDescending = sortDescending
         self.cloudSyncEnabled = cloudSyncEnabled
+        self.blockScreenCapture = blockScreenCapture
     }
 
     /// Hand-written so settings added in a later version decode as their
@@ -129,11 +136,17 @@ public struct VaultSettings: Codable, Sendable, Equatable {
         chainOrder = try container.decodeIfPresent([Chain].self, forKey: .chainOrder) ?? []
         sortDescending = try container.decodeIfPresent(Bool.self, forKey: .sortDescending)
         cloudSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .cloudSyncEnabled) ?? false
+        blockScreenCapture = try container.decodeIfPresent(Bool.self, forKey: .blockScreenCapture)
     }
 
     /// Whether the list currently reads high-to-low.
     public var effectiveSortDescending: Bool {
         sortDescending ?? sortOrder.defaultsToDescending
+    }
+
+    /// Capture blocking with its default applied: on unless switched off.
+    public var effectiveBlockScreenCapture: Bool {
+        blockScreenCapture ?? true
     }
 
     /// Applies the stored order to a set of items, keeping anything unlisted in

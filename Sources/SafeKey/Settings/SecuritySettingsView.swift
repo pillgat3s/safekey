@@ -107,6 +107,15 @@ struct SecuritySettingsView: View {
             }
 
             Section {
+                Toggle("Hide SafeKey from screen capture", isOn: captureBinding)
+            } header: {
+                Text("On Screen")
+            } footer: {
+                Text("When on, SafeKey's windows come out blank in screenshots, screen recordings, and screen sharing — anyone capturing this screen gets an empty rectangle where the vault is. Turn it off to include SafeKey in your own captures. Takes effect immediately.")
+                    .font(.caption)
+            }
+
+            Section {
                 Toggle("Sync with iCloud", isOn: cloudSyncBinding)
                 if session.settings.cloudSyncEnabled {
                     LabeledContent("Status") {
@@ -461,6 +470,17 @@ struct SecuritySettingsView: View {
         case .failed(let reason): reason
         case .differentVault: "iCloud holds a different vault"
         }
+    }
+
+    private var captureBinding: Binding<Bool> {
+        Binding(
+            get: { session.settings.effectiveBlockScreenCapture },
+            set: { newValue in
+                var settings = session.settings
+                settings.blockScreenCapture = newValue
+                session.updateSettings(settings)
+            }
+        )
     }
 
     private var cloudSyncBinding: Binding<Bool> {

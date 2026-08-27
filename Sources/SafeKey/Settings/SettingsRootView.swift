@@ -29,6 +29,8 @@ struct SettingsRootView: View {
                 .frame(width: 480, height: 260)
             }
         }
-        .protectedWindow()
+        .protectedWindow(
+            blocksScreenCapture: model.session?.settings.effectiveBlockScreenCapture ?? true
+        )
     }
 }

@@ -39,3 +39,27 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(settings.cloudBackupEnabled)
     }
 }
+
+/// The screen-capture toggle's contract: protection is the default, older
+/// vaults keep it, and turning it off survives a round trip.
+final class ScreenCaptureSettingTests: XCTestCase {
+    func testProtectionIsTheDefault() {
+        XCTAssertTrue(VaultSettings().effectiveBlockScreenCapture)
+    }
+
+    func testAVaultWrittenBeforeTheToggleKeepsProtection() throws {
+        // A payload from a build that never heard of the key.
+        let legacy = Data(#"{"lockOnSleep":true}"#.utf8)
+        let decoded = try VaultJSON.decoder().decode(VaultSettings.self, from: legacy)
+        XCTAssertNil(decoded.blockScreenCapture)
+        XCTAssertTrue(decoded.effectiveBlockScreenCapture, "an old vault must not silently lose the protection")
+    }
+
+    func testTurningItOffRoundTrips() throws {
+        var settings = VaultSettings()
+        settings.blockScreenCapture = false
+        let data = try VaultJSON.encoder().encode(settings)
+        let decoded = try VaultJSON.decoder().decode(VaultSettings.self, from: data)
+        XCTAssertFalse(decoded.effectiveBlockScreenCapture)
+    }
+}

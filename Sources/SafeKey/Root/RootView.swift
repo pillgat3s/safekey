@@ -9,6 +9,13 @@ struct RootView: View {
         return false
     }
 
+    private var blocksCapture: Bool {
+        if let session = model.session {
+            return session.settings.effectiveBlockScreenCapture
+        }
+        return !isLocked
+    }
+
     var body: some View {
         Group {
             switch model.state {
@@ -31,8 +38,9 @@ struct RootView: View {
         }
         // The lock screen shows no secrets, and excluding a window from screen
         // capture appears to stop the system attaching the biometric prompt to
-        // it. Everything past the lock screen stays protected.
-        .protectedWindow(blocksScreenCapture: !isLocked)
+        // it. Past the lock screen the user's own setting decides — on unless
+        // they switched it off, and re-applied live when they do.
+        .protectedWindow(blocksScreenCapture: blocksCapture)
         .task {
             if case .loading = model.state {
                 await model.bootstrap()
