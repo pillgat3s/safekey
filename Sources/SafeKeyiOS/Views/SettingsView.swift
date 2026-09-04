@@ -344,6 +344,8 @@ struct SettingsView: View {
                 }
             } catch VaultError.wrongPassword {
                 errorMessage = "That password does not open the vault in iCloud."
+            } catch VaultError.deviceKeyRequired {
+                errorMessage = "The vault in iCloud is protected by a USB security key, which an iPhone cannot use. Remove that requirement on the Mac first."
             } catch {
                 errorMessage = "Could not read the iCloud vault: \(error.localizedDescription)"
             }
@@ -374,6 +376,8 @@ struct SettingsView: View {
                 dismiss()
             } catch VaultError.wrongPassword {
                 errorMessage = "That password does not open the vault in iCloud."
+            } catch VaultError.deviceKeyRequired {
+                errorMessage = "The vault in iCloud is protected by a USB security key, which an iPhone cannot use. Remove that requirement on the Mac first."
             } catch {
                 errorMessage = "Could not use the iCloud vault: \(error.localizedDescription)"
             }

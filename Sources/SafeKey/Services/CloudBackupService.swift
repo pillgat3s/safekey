@@ -66,11 +66,6 @@ final class CloudBackupService {
         )
     }
 
-    func latestBackup() -> Data? {
-        guard let backupURL else { return nil }
-        return try? Data(contentsOf: backupURL)
-    }
-
     func removeBackup() {
         guard let backupURL else { return }
         try? FileManager.default.removeItem(at: backupURL)

@@ -458,6 +458,38 @@ final class SyncCoordinatorTests: XCTestCase {
         }
     }
 
+    // MARK: - A vault behind a USB security key
+
+    /// Sync must not run for a keyed vault even if the switch is on: the other
+    /// device could never derive the rotated data key. It says so instead.
+    func testAKeyedVaultIsNotSyncedAndSaysWhy() async throws {
+        let password = "correct-horse-1"
+        let plain = try makeVault(entries: [entry("Cold")], password: password)
+        let keyed = try DeviceKeyFactor.apply(
+            to: plain,
+            password: password,
+            currentDeviceKey: nil,
+            newPolicy: UnlockPolicy(
+                requiresDevice: true,
+                volumeUUID: "TEST-VOLUME",
+                volumeName: "Stick",
+                keyFileRelPath: VolumeDeviceKeyProvider.defaultKeyRelPath
+            ),
+            newDeviceKey: DeviceKeyFactor.generateDeviceKey()
+        )
+        let rig = try makeRig(vault: keyed)
+
+        let outcome = await rig.coordinator.syncIfEnabled(session: rig.session)
+
+        XCTAssertNil(outcome)
+        guard case .unavailable(let reason) = rig.coordinator.status else {
+            return XCTFail("expected an unavailable status, got \(rig.coordinator.status)")
+        }
+        XCTAssertTrue(reason.localizedCaseInsensitiveContains("security key"), "the reason has to name the cause")
+        let live = await rig.server.liveRecordIDs
+        XCTAssertTrue(live.isEmpty, "nothing may have been uploaded")
+    }
+
     // MARK: - Switched off
 
     func testNothingHappensWhileSyncIsOff() async throws {

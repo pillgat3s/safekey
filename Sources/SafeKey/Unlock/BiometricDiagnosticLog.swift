@@ -43,7 +43,13 @@ enum BiometricDiagnosticLog {
         return "\(nsError.domain) \(nsError.code): \(nsError.localizedDescription)"
     }
 
+    /// Debug builds only. A release build must not keep a running record of
+    /// when the vault was opened and how — that is behavioural data the user
+    /// never asked to have written down, growing without bound in a file next
+    /// to the vault. `describe` stays available: the on-screen error text
+    /// depends on it.
     static func record(_ stage: String, error: (any Error)? = nil) {
+        #if DEBUG
         var line = "\(Date().formatted(date: .omitted, time: .standard))  \(stage)"
         if let error {
             line += " — \(describe(error))"
@@ -57,5 +63,6 @@ enum BiometricDiagnosticLog {
         } else {
             try? data.write(to: url)
         }
+        #endif
     }
 }

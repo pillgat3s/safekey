@@ -68,11 +68,18 @@ struct SecuritySettingsView: View {
                         Text("Not required").foregroundStyle(.secondary)
                     }
                     Button("Require a Security Key…") { showingDeviceKeySetup = true }
+                        .disabled(session.settings.cloudSyncEnabled)
                 }
             } header: {
                 Text("USB Security Key")
             } footer: {
-                Text("When enabled, the vault key is cryptographically bound to a key file on your USB device. The correct password without the device cannot open the vault — and losing the device (and its backup) makes the vault permanently unrecoverable.")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("When enabled, the vault key is cryptographically bound to a key file on your USB device. The correct password without the device cannot open the vault — and losing the device (and its backup) makes the vault permanently unrecoverable.")
+                    if session.settings.cloudSyncEnabled {
+                        Text("Not available while iCloud sync is on: a vault protected by a security key cannot be opened on an iPhone, so it cannot be shared through iCloud. Turn sync off first.")
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
 
             Section("Revealing Secrets") {
@@ -117,6 +124,12 @@ struct SecuritySettingsView: View {
 
             Section {
                 Toggle("Sync with iCloud", isOn: cloudSyncBinding)
+                    .disabled(session.header.unlockPolicy.requiresDevice)
+                if session.header.unlockPolicy.requiresDevice {
+                    Text("Unavailable while a USB security key protects this vault: the key cannot exist on an iPhone, so the vault cannot be shared. Remove the key requirement first.")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                }
                 if session.settings.cloudSyncEnabled {
                     LabeledContent("Status") {
                         Text(syncStatusText).foregroundStyle(.secondary)
@@ -184,7 +197,7 @@ struct SecuritySettingsView: View {
             } header: {
                 Text("iCloud")
             } footer: {
-                Text("Only the encrypted vault file is uploaded — the same sealed file stored on this Mac. It can be opened solely with your master password, so iCloud never holds anything readable. Updated automatically after every change.")
+                Text("Only the encrypted vault file is uploaded — the same sealed file stored on this Mac. It can be opened solely with your master password, so iCloud never holds anything readable. Updated automatically after every change; turning this off deletes the copy from iCloud Drive.")
             }
 
             Section {
@@ -428,6 +441,8 @@ struct SecuritySettingsView: View {
                 }
             } catch VaultError.wrongPassword {
                 adoptError = "That password does not open the vault in iCloud."
+            } catch VaultError.deviceKeyRequired {
+                adoptError = "The vault in iCloud is protected by a USB security key, which cannot be used through iCloud. Remove that requirement on the Mac that holds it, then try again."
             } catch {
                 adoptError = "Could not read the iCloud vault: \(error.localizedDescription)"
             }
@@ -454,6 +469,8 @@ struct SecuritySettingsView: View {
                 try await model.adoptCloudVault(password: password)
             } catch VaultError.wrongPassword {
                 adoptError = "That password does not open the vault in iCloud."
+            } catch VaultError.deviceKeyRequired {
+                adoptError = "The vault in iCloud is protected by a USB security key, which cannot be used through iCloud. Remove that requirement on the Mac that holds it, then try again."
             } catch {
                 adoptError = "Could not use the iCloud vault: \(error.localizedDescription)"
             }
@@ -508,6 +525,10 @@ struct SecuritySettingsView: View {
                     // Copy immediately so the toggle means something now,
                     // rather than only after the next edit.
                     backUpToCloudNow()
+                } else {
+                    // "Keep a copy" switched off means the copy goes. Leaving
+                    // it behind would keep a file the user believes is gone.
+                    CloudBackupService.shared.removeBackup()
                 }
             }
         )
@@ -590,7 +611,10 @@ struct SecuritySettingsView: View {
         panel.title = "Export Backup Key"
         if panel.runModal() == .OK, let url = panel.url {
             do {
-                try deviceKey.write(to: url)
+                try deviceKey.write(to: url, options: [.atomic])
+                // This file is the second factor — owner-only, like the copy
+                // the setup flow exports.
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
             } catch {
                 errorMessage = "Could not write the backup: \(error.localizedDescription)"
             }

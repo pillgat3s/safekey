@@ -18,6 +18,34 @@ struct EntryEditView: View {
     @State private var favorite = false
     @State private var groupID: UUID?
     @State private var showingDerivation = false
+    @State private var baseline: Snapshot?
+    @State private var confirmingDiscard = false
+
+    /// Everything Save would write, so "opened and looked" can be told apart
+    /// from "typed half a seed phrase".
+    private struct Snapshot: Equatable {
+        var name: String
+        var chain: Chain
+        var kind: KindSelection
+        var secret: String
+        var publicAddress: String
+        var notes: String
+        var tagsText: String
+        var favorite: Bool
+        var groupID: UUID?
+    }
+
+    private var snapshot: Snapshot {
+        Snapshot(
+            name: name, chain: chain, kind: kindSelection, secret: secret,
+            publicAddress: publicAddress, notes: notes, tagsText: tagsText,
+            favorite: favorite, groupID: groupID
+        )
+    }
+
+    private var hasUnsavedChanges: Bool {
+        baseline.map { $0 != snapshot } ?? false
+    }
 
     /// Only Solana is implemented so far, and only when there is a secret to
     /// work from.
@@ -210,7 +238,13 @@ struct EntryEditView: View {
             .navigationTitle(existing == nil ? "New Wallet" : "Edit Wallet")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        if hasUnsavedChanges {
+                            confirmingDiscard = true
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
@@ -220,6 +254,17 @@ struct EntryEditView: View {
         }
         .frame(minWidth: 460, minHeight: 520)
         .onAppear(perform: populate)
+        // Twenty words of a seed phrase are real work; Escape must not throw
+        // them away without a word. Dismissing with edits pending asks first.
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .confirmationDialog(
+            "Discard this wallet's changes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Keep Editing", role: .cancel) {}
+        }
         .sheet(isPresented: $showingChainPicker) {
             ChainPickerView(selection: $chain)
         }
@@ -242,6 +287,9 @@ struct EntryEditView: View {
     }
 
     private func populate() {
+        // Taken after the fields are filled, so for an existing wallet
+        // "unchanged" means "as it was", not "empty".
+        defer { baseline = snapshot }
         guard let existing else {
             chain = session.settings.defaultChain
             return

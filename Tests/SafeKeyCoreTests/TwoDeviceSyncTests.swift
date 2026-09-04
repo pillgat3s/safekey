@@ -482,6 +482,49 @@ final class TwoDeviceSyncTests: XCTestCase {
         XCTAssertTrue(joined.unlocked.payload.settings.cloudSyncEnabled)
     }
 
+    // MARK: - A vault behind a USB security key
+
+    /// Such a vault cannot be joined through iCloud — the key file has to be
+    /// present, and the joining device may not even have a port for it. What
+    /// the user must hear is that, not "wrong password".
+    func testJoiningAVaultThatNeedsASecurityKeySaysSo() async throws {
+        let server = CloudServer()
+        let password = "correct-horse-battery-3"
+        let (_, plain) = try Vault.create(password: password, iterations: 1_000)
+        let keyed = try DeviceKeyFactor.apply(
+            to: plain,
+            password: password,
+            currentDeviceKey: nil,
+            newPolicy: UnlockPolicy(
+                requiresDevice: true,
+                volumeUUID: "TEST-VOLUME",
+                volumeName: "Stick",
+                keyFileRelPath: VolumeDeviceKeyProvider.defaultKeyRelPath
+            ),
+            newDeviceKey: DeviceKeyFactor.generateDeviceKey()
+        )
+        try await VaultSync(backend: DeviceBackend(server: server), dek: keyed.dek)
+            .publishVault(header: keyed.header)
+
+        do {
+            _ = try await VaultSync.adoptRemoteVault(backend: DeviceBackend(server: server), password: password)
+            XCTFail("a keyed vault must not be joinable without the key")
+        } catch VaultError.deviceKeyRequired {
+            // the right refusal
+        }
+
+        do {
+            _ = try await VaultSync.mergeRemoteVault(
+                backend: DeviceBackend(server: server),
+                password: password,
+                into: plain
+            )
+            XCTFail("a keyed vault must not be mergeable without the key")
+        } catch VaultError.deviceKeyRequired {
+            // the right refusal
+        }
+    }
+
     // MARK: - Recovering from a wiped zone
 
     /// "Replace the iCloud copy" deletes the zone. The other device is then

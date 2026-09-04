@@ -271,7 +271,12 @@ struct UnlockView: View {
                 errorMessage = "This vault file is damaged and cannot be read."
                 isUnlocking = false
             } catch VaultError.vaultNotFound {
+                // Usually self-destruct, which has already switched the app to
+                // its setup screen; if the file simply vanished, say so rather
+                // than spin for ever.
                 password = ""
+                isUnlocking = false
+                if case .locked = model.state { errorMessage = "The vault file is missing." }
             } catch {
                 errorMessage = "Could not open the vault: \(error.localizedDescription)"
                 isUnlocking = false

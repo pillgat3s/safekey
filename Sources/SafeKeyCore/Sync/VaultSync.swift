@@ -425,8 +425,10 @@ public struct VaultSync: Sendable {
             throw SyncError.unavailable("There is no vault in iCloud yet.")
         }
         let header = try VaultJSON.decoder().decode(VaultHeader.self, from: remote.header)
-        // Wrong password surfaces here, as a GCM failure to unwrap.
-        let kek = try KeyDerivation.deriveKey(password: password, params: header.kdf)
+        // Through the same derivation the vault itself uses, so a header that
+        // also needs a USB security key says so — deriving from the password
+        // alone would fail to unwrap and be reported as a wrong password.
+        let kek = try Vault.kek(for: header, password: password, deviceKey: nil)
         let dek: SymmetricKey
         do {
             dek = try VaultCrypto.unwrapDEK(header.wrappedDEK, under: kek)
@@ -478,7 +480,7 @@ public struct VaultSync: Sendable {
             throw SyncError.unavailable("There is no vault in iCloud yet.")
         }
         let header = try VaultJSON.decoder().decode(VaultHeader.self, from: remote.header)
-        let kek = try KeyDerivation.deriveKey(password: password, params: header.kdf)
+        let kek = try Vault.kek(for: header, password: password, deviceKey: nil)
         let remoteDEK: SymmetricKey
         do {
             remoteDEK = try VaultCrypto.unwrapDEK(header.wrappedDEK, under: kek)

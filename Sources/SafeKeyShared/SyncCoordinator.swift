@@ -116,6 +116,15 @@ final class SyncCoordinator {
             status = .off
             return nil
         }
+        // A vault behind a USB security key cannot be shared: enabling the key
+        // rotated the data key, and the other device — an iPhone, with no port
+        // for the key file — could never derive the new one. Settings stops
+        // the two being switched on together; this covers a vault that already
+        // had both, and says why instead of syncing nothing.
+        guard !session.header.unlockPolicy.requiresDevice else {
+            status = .unavailable("Paused while a USB security key protects this vault — it cannot be opened on an iPhone, so it is not shared through iCloud.")
+            return nil
+        }
         guard await environment.isAvailable() else {
             status = .unavailable("Sign in to iCloud on this device to sync.")
             return nil

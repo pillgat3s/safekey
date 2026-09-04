@@ -27,6 +27,7 @@ struct SidebarView: View {
     @Binding var selection: SidebarItem
 
     @State private var groupBeingRenamed: WalletGroup?
+    @State private var groupPendingDeletion: WalletGroup?
     /// Non-nil while the new-group sheet is up, carrying the chain it is for.
     @State private var newGroupChain: Chain?
 
@@ -184,9 +185,8 @@ struct SidebarView: View {
                             .padding(.leading, 16)
                             .contextMenu {
                                 Button("Rename…") { groupBeingRenamed = group }
-                                Button("Delete Group", role: .destructive) {
-                                    if selection == .group(group.id) { selection = .chain(chain) }
-                                    session.deleteGroup(id: group.id)
+                                Button("Delete Group…", role: .destructive) {
+                                    groupPendingDeletion = group
                                 }
                             }
                         }
@@ -248,6 +248,24 @@ struct SidebarView: View {
         }
         .sheet(item: $groupBeingRenamed) { group in
             GroupEditorView(session: session, chain: group.chain, existing: group)
+        }
+        .confirmationDialog(
+            "Delete “\(groupPendingDeletion?.name ?? "")”?",
+            isPresented: Binding(
+                get: { groupPendingDeletion != nil },
+                set: { if !$0 { groupPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Group", role: .destructive) {
+                if let group = groupPendingDeletion {
+                    if selection == .group(group.id) { selection = .chain(group.chain) }
+                    session.deleteGroup(id: group.id)
+                }
+                groupPendingDeletion = nil
+            }
+        } message: {
+            Text("The wallets in it are kept — they just stop belonging to a group.")
         }
     }
 

@@ -151,7 +151,11 @@ struct EntryListView: View {
                 entryPendingDeletion = nil
             }
         } message: {
-            Text("The secret is removed from the encrypted vault. This cannot be undone.")
+            Text(
+                session.settings.cloudSyncEnabled
+                    ? "This removes the secret from this Mac, from iCloud, and from your other devices. There is no undo."
+                    : "The secret is removed from the encrypted vault. There is no undo."
+            )
         }
     }
 

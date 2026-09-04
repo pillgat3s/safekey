@@ -214,9 +214,26 @@ final class AppModel {
     /// Turns the USB security-key factor on: writes a fresh device key to the
     /// chosen volume, re-wraps the vault, updates the biometric blob, and
     /// returns the key bytes so the UI can offer a backup export.
+    /// Why a USB security key cannot be added to a syncing vault.
+    ///
+    /// Enabling the key rotates the data key, and every wallet in iCloud is
+    /// sealed under the old one. This Mac could re-seal and re-upload them, but
+    /// the other device could never open the result: the new data key is
+    /// wrapped under the password *and* the key file, and an iPhone has no
+    /// port to hold the file. The two features are therefore exclusive, and
+    /// the settings screen disables whichever one the other rules out.
+    enum DeviceFactorError: LocalizedError {
+        case syncEnabled
+
+        var errorDescription: String? {
+            "Turn off iCloud sync first. A vault protected by a USB security key cannot be opened on an iPhone, so it cannot be shared through iCloud."
+        }
+    }
+
     @discardableResult
     func enableDeviceFactor(password: String, volume: RemovableVolume) async throws -> Data {
         guard let session else { throw VaultError.vaultNotFound }
+        guard !session.settings.cloudSyncEnabled else { throw DeviceFactorError.syncEnabled }
         let currentDeviceKey = try currentDeviceKeyIfRequired(header: session.header)
         await session.flushPendingSaves()
         let deviceKey = DeviceKeyFactor.generateDeviceKey()
@@ -255,9 +272,6 @@ final class AppModel {
         return deviceKey
     }
 
-    /// Re-stores the biometric DEK copy after a DEK rotation. If it cannot be
-    /// re-stored, biometric unlock is disabled rather than left pointing at a
-    /// key that no longer opens the vault.
     /// Rewrites the stored biometric key on every successful unlock.
     ///
     /// A login-keychain item's ACL is tied to the build that created it, so an
@@ -266,14 +280,33 @@ final class AppModel {
     /// open — the one moment the key is available — keeps the ACL matched to
     /// the running build, so Touch ID survives reinstalls instead of silently
     /// dying. Failure here is not fatal: the existing enrolment is left alone.
-    private func reprovisionBiometricKeyIfEnabled() {
-        guard let session, biometricFactor.isEnabled(vaultID: session.header.vaultID) else { return }
-        let policy = session.header.unlockPolicy
+    ///
+    /// Takes the unlocked vault rather than reading `session`: it runs from the
+    /// middle of adopting a session, before `state` has been switched over, and
+    /// reading `session` there returned nil every time — which meant this never
+    /// ran at all.
+    private func reprovisionBiometricKeyIfEnabled(_ unlocked: Vault.Unlocked) {
+        guard biometricFactor.isEnabled(vaultID: unlocked.header.vaultID) else { return }
+        let policy = unlocked.header.unlockPolicy
         let deviceKey = policy.requiresDevice ? deviceKeyProvider.locateDeviceKey(policy: policy) : nil
         if policy.requiresDevice, deviceKey == nil { return }
+        let blob: Data
+        do {
+            if let deviceKey {
+                blob = try VaultCrypto.wrapDEK(unlocked.dek, under: SymmetricKey(data: deviceKey))
+            } else {
+                blob = unlocked.dek.withUnsafeBytes { Data($0) }
+            }
+        } catch {
+            return
+        }
         Task { [weak self] in
             guard let self else { return }
-            _ = try? await self.enableBiometricUnlock(deviceKey: deviceKey, confirm: false)
+            _ = try? await self.biometricFactor.enable(
+                secret: blob,
+                vaultID: unlocked.header.vaultID,
+                confirm: false
+            )
             self.refreshBiometricAvailability()
         }
     }
@@ -531,7 +564,7 @@ final class AppModel {
         Task { await store.clearRescueCopy() }
         // Clear markers belonging to vaults that no longer exist.
         biometricFactor.pruneStrategyMarkers(keeping: unlocked.header.vaultID)
-        reprovisionBiometricKeyIfEnabled()
+        reprovisionBiometricKeyIfEnabled(unlocked)
         // Demo mode uses a throwaway store and must never reach iCloud.
         let syncable = store === self.store
         let session = VaultSession(unlocked: unlocked, store: store, onPersist: { [weak self] written, session in
