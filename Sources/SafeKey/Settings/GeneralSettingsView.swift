@@ -12,9 +12,9 @@ struct GeneralSettingsView: View {
                 }
             }
             Picker("Sort entries by", selection: sortOrderBinding) {
-                Text("Date Modified").tag(VaultSettings.SortOrder.dateModified)
-                Text("Name").tag(VaultSettings.SortOrder.name)
-                Text("Chain").tag(VaultSettings.SortOrder.chain)
+                ForEach(VaultSettings.SortOrder.allCases, id: \.self) { order in
+                    Text(order.label).tag(order)
+                }
             }
         }
         .formStyle(.grouped)

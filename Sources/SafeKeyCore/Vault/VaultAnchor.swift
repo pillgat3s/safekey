@@ -101,7 +101,16 @@ public struct VaultAnchorStore: Sendable {
         guard createIfMissing else { return nil }
         let fresh = KeyDerivation.randomBytes(count: 32)
         do {
-            try keychain.write(fresh, account: Self.macKeyAccount, accessibility: .afterFirstUnlockThisDeviceOnly)
+            // Naming this app in the item's ACL is what lets a differently
+            // signed build of it — a notarized release replacing a development
+            // build — read the key back without a keychain prompt. Ignored on
+            // iOS, where every item is scoped to its app already.
+            try keychain.write(
+                fresh,
+                account: Self.macKeyAccount,
+                accessibility: .afterFirstUnlockThisDeviceOnly,
+                trustingThisApp: true
+            )
         } catch {
             return nil
         }
@@ -166,7 +175,12 @@ public struct VaultAnchorStore: Sendable {
 
     public func save(_ anchor: VaultAnchor) {
         if let data = try? VaultJSON.encoder().encode(anchor) {
-            try? keychain.write(data, account: Self.anchorAccount, accessibility: .afterFirstUnlockThisDeviceOnly)
+            try? keychain.write(
+                data,
+                account: Self.anchorAccount,
+                accessibility: .afterFirstUnlockThisDeviceOnly,
+                trustingThisApp: true
+            )
         }
         guard
             let key = macKey(createIfMissing: true),
