@@ -6,8 +6,10 @@
 #   scripts/release-mac.sh package 1.0.0 <.app>   DMG + checksum + GitHub Release
 #                                                  from an app exported by Xcode
 #   scripts/release-mac.sh preview 1.0.0          development-signed DMG, marked
-#                                                  pre-release: runs on this Mac,
-#                                                  warns on any other
+#                                                  pre-release: runs only on Macs
+#                                                  registered to the team, since
+#                                                  the iCloud entitlement binds
+#                                                  it to a device-listed profile
 #
 # What a proper release needs on this machine, once:
 #   1. A "Developer ID Application" certificate in the login keychain
@@ -171,7 +173,7 @@ release_notes() {
   {
     if [ "$prerelease" = "yes" ]; then
       cat <<'EOF'
-**Preview build.** Signed for development, not notarized: macOS will warn that it cannot verify the developer on any Mac other than the one that built it. To open it anyway: right-click → Open, then confirm — or allow it under System Settings → Privacy & Security. The notarized release will replace this.
+**Preview build.** Signed with a development certificate, not notarized, and carrying a provisioning profile that lists specific Macs: it runs on the Mac that built it and on Macs registered to the developer team, and macOS will refuse to launch it anywhere else. Use it to try the packaging; the notarized release will replace it.
 
 EOF
     fi

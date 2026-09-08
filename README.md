@@ -19,10 +19,10 @@ Builds live on the [Releases page](https://github.com/pillgat3s/safekey/releases
 Open the DMG and drag SafeKey to Applications. Each DMG ships with a
 `.sha256` file: `shasum -a 256 -c SafeKey-<version>.dmg.sha256` verifies it.
 
-A release marked **preview** is signed for development rather than notarized:
-macOS warns that it cannot verify the developer on any Mac other than the one
-that built it (right-click → Open gets past it). Notarized releases carry no
-such label.
+A release marked **preview** is signed for development rather than notarized,
+and its provisioning profile lists specific Macs: it runs on the Mac that built
+it and on Macs registered to the developer team, and macOS refuses to launch it
+anywhere else. Notarized releases carry no such label and run on any Mac.
 
 ## Security model
 
@@ -303,7 +303,7 @@ Mac app:
 ```bash
 scripts/release-mac.sh build 1.0.0              # Developer ID + notarization, end to end
 scripts/release-mac.sh package 1.0.0 <app>      # DMG + checksum + release from an app Xcode exported
-scripts/release-mac.sh preview 1.0.0            # development-signed DMG, published as a pre-release
+scripts/release-mac.sh preview 1.0.0            # development-signed DMG, pre-release, team Macs only
 ```
 
 A proper release needs, once, on the building Mac: a **Developer ID
