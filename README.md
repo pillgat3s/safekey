@@ -13,6 +13,17 @@ container format, and the self-destruct accounting are one audited source
 rather than two implementations that can drift apart. A vault exported from one
 opens on the other.
 
+## Download
+
+Builds live on the [Releases page](https://github.com/pillgat3s/safekey/releases).
+Open the DMG and drag SafeKey to Applications. Each DMG ships with a
+`.sha256` file: `shasum -a 256 -c SafeKey-<version>.dmg.sha256` verifies it.
+
+A release marked **preview** is signed for development rather than notarized:
+macOS warns that it cannot verify the developer on any Mac other than the one
+that built it (right-click → Open gets past it). Notarized releases carry no
+such label.
+
 ## Security model
 
 | Layer | What it does |
@@ -286,9 +297,27 @@ derivation (like the USB key) or produces the data key directly (like Touch ID).
 
 ## Distribution notes
 
-The current build is ad-hoc signed for personal use. Selling it outside the Mac
-App Store needs a Developer ID certificate and notarization. Note that the
-bundle-rebrand disguise re-signs ad-hoc, which conflicts with a notarized
-signature — that flow needs rethinking before release (a signed helper, or
-Dock-level disguise only). The Mac App Store is not an option for the rebrand
-feature at all, since the sandbox forbids an app modifying its own bundle.
+`scripts/release-mac.sh` builds, signs, notarizes, packages and publishes the
+Mac app:
+
+```bash
+scripts/release-mac.sh build 1.0.0              # Developer ID + notarization, end to end
+scripts/release-mac.sh package 1.0.0 <app>      # DMG + checksum + release from an app Xcode exported
+scripts/release-mac.sh preview 1.0.0            # development-signed DMG, published as a pre-release
+```
+
+A proper release needs, once, on the building Mac: a **Developer ID
+Application** certificate (only the account holder can create one),
+notarization credentials stored with `xcrun notarytool store-credentials`, and
+— because the iCloud entitlement is restricted — a Developer ID provisioning
+profile, which Xcode's Organizer creates on the first Developer ID export. The
+notes at the top of the script spell each out.
+
+Release builds run with the hardened runtime, which notarization requires.
+Two consequences are deliberate: the bundle-rebrand disguise is compiled out
+of release builds, because an app that re-signs itself ad hoc is refused by
+macOS the next time it opens (the Dock-level disguise remains); and the debug
+hooks and the biometric diagnostic log do not exist in them at all.
+
+The Mac App Store is not a target: the disguise and the USB security key both
+need an unsandboxed app.

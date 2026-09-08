@@ -73,10 +73,12 @@ struct DisguiseSettingsView: View {
                 Button("Apply to Dock Now") {
                     manager.select(presetID: selectedPresetID, customName: customName)
                 }
+                #if DEBUG
                 Button("Rebrand App Bundle…") {
                     showingRebrandConfirmation = true
                 }
                 .disabled(!manager.bundleIsWritable)
+                #endif
                 if manager.currentPresetID != DisguisePreset.original.id
                     || !manager.customName.isEmpty
                     || manager.bundleIsRebranded {
@@ -98,6 +100,7 @@ struct DisguiseSettingsView: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("“Apply to Dock Now” changes the running app immediately and is remembered at launch.")
+                    #if DEBUG
                     Text("“Rebrand App Bundle” also rewrites the app's name and icon on disk so Finder and Spotlight show the disguise. SafeKey re-signs itself and relaunches.")
                     Text(DisguiseManager.rebrandCost)
                         .foregroundStyle(.orange)
@@ -105,6 +108,9 @@ struct DisguiseSettingsView: View {
                         Text("Rebranding is unavailable because this copy of SafeKey isn't writable — move it to /Applications or your home folder.")
                             .foregroundStyle(.orange)
                     }
+                    #else
+                    Text("Rewriting the app on disk is not offered in this build: a notarized app that re-signs itself is refused by macOS the next time it opens, and the re-sign also drops Touch ID and iCloud sync. The disguise applies to the Dock and window.")
+                    #endif
                 }
                 .font(.caption)
             }

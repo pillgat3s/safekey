@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Developer ID: for distribution outside the Mac App Store. -->
+	<key>method</key>
+	<string>developer-id</string>
+	<key>teamID</key>
+	<string>RR9A8973M8</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<!-- The iCloud container is a restricted entitlement, so Developer ID needs a
+	     provisioning profile that grants it; Xcode fetches or creates one. -->
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>
