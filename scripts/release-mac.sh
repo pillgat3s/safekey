@@ -39,7 +39,9 @@ ARCHIVE="$OUT/$PRODUCT.xcarchive"
 EXPORT="$OUT/export"
 
 usage() { sed -n '2,25p' "$0"; exit 1; }
-say()   { printf '\n\033[1m%s\033[0m\n' "$*"; }
+# Status goes to stderr: several functions hand their result back on stdout
+# for `$(...)`, and a stray status line inside that would corrupt the value.
+say()   { printf '\n\033[1m%s\033[0m\n' "$*" >&2; }
 die()   { printf '\n\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -n "$MODE" ] && [ -n "$VERSION" ] || usage
@@ -78,8 +80,9 @@ archive() {
   say "Archiving $PRODUCT $VERSION (Release, hardened runtime)"
   rm -rf "$ARCHIVE"
   xcodebuild -project "$ROOT/SafeKey.xcodeproj" -scheme "$SCHEME" -configuration Release \
+    -destination 'generic/platform=macOS' \
     -archivePath "$ARCHIVE" MARKETING_VERSION="$VERSION" archive \
-    | grep -E "error:|warning: .*(sign|entitle)|ARCHIVE (SUCCEEDED|FAILED)" || true
+    | grep -E "error:|warning: .*(sign|entitle)|ARCHIVE (SUCCEEDED|FAILED)" >&2 || true
   [ -d "$ARCHIVE" ] || die "archive failed"
 }
 
@@ -88,7 +91,7 @@ export_developer_id() {
   rm -rf "$EXPORT"
   xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
     -exportOptionsPlist "$ROOT/scripts/ExportOptions.plist" -allowProvisioningUpdates \
-    | grep -E "error:|EXPORT (SUCCEEDED|FAILED)" || true
+    | grep -E "error:|EXPORT (SUCCEEDED|FAILED)" >&2 || true
   [ -d "$EXPORT/$PRODUCT.app" ] || die "export failed — see the note about Xcode's Organizer at the top of this script"
   echo "$EXPORT/$PRODUCT.app"
 }
@@ -112,7 +115,7 @@ notarize() {
     ditto -c -k --keepParent "$path" "$zip"
     xcrun notarytool submit "$zip" --keychain-profile "$NOTARY_PROFILE" --wait
   fi
-  xcrun stapler staple "$path"
+  xcrun stapler staple "$path" >&2
 }
 
 make_dmg() {
@@ -127,6 +130,7 @@ make_dmg() {
   ln -s /Applications "$staging/Applications"
   hdiutil create -volname "$PRODUCT $VERSION" -srcfolder "$staging" -ov -format UDZO "$dmg" >/dev/null
   rm -rf "$staging"
+  [ -f "$dmg" ] || die "DMG was not created"
   echo "$dmg"
 }
 
@@ -139,6 +143,7 @@ sign_dmg() {
 
 checksum() {
   local dmg="$1"
+  [ -f "$dmg" ] || die "checksum: no such file $dmg"
   (cd "$(dirname "$dmg")" && shasum -a 256 "$(basename "$dmg")" > "$(basename "$dmg").sha256")
   echo "$dmg.sha256"
 }
@@ -151,11 +156,11 @@ publish() {
   local flags=()
   [ "$prerelease" = "yes" ] && flags+=(--prerelease)
   if gh release view "$tag" >/dev/null 2>&1; then
-    gh release upload "$tag" "$dmg" "$dmg.sha256" --clobber
-    gh release edit "$tag" --notes-file "$notes"
+    gh release upload "$tag" "$dmg" "$dmg.sha256" --clobber >&2
+    gh release edit "$tag" --notes-file "$notes" >&2
   else
     gh release create "$tag" "$dmg" "$dmg.sha256" --title "$PRODUCT $VERSION$([ "$prerelease" = "yes" ] && echo " (preview)")" \
-      --notes-file "$notes" "${flags[@]}"
+      --notes-file "$notes" "${flags[@]}" >&2
   fi
   gh release view "$tag" --json url -q .url
 }
