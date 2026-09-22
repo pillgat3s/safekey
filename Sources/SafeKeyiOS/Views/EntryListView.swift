@@ -161,9 +161,7 @@ struct EntryListView: View {
     }
 
     private func row(for entry: WalletEntry) -> some View {
-        NavigationLink {
-            EntryDetailView(session: session, entryID: entry.id)
-        } label: {
+        NavigationLink(value: HomeRoute.entry(entry.id)) {
             EntryRow(entry: entry, groupName: session.group(id: entry.groupID)?.name)
         }
         .swipeActions(edge: .trailing) {

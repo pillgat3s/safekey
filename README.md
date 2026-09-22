@@ -251,7 +251,9 @@ the entitlement before anything else.
 disguise (an app cannot rewrite its own bundle, and concealment sits badly with
 App Store review — alternate app icons are the sanctioned equivalent). Instead
 iOS adds a privacy cover that hides the UI from the app-switcher snapshot, and
-locks whenever the app leaves the foreground. Everything else — self-destruct,
+locks whenever the app leaves the foreground. Coming back, Face ID starts on
+its own and the screen you left is restored: a wallet that was open is open
+again, its secret hidden until tapped. Everything else — self-destruct,
 password change, encrypted backup and restore, chain-scoped groups, tags, real
 chain artwork, Solana address derivation — is present on both.
 

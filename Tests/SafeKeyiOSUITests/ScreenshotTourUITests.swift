@@ -70,7 +70,11 @@ final class ScreenshotTourUITests: XCTestCase {
         capture("02-onboarding-filled")
 
         app.buttons["Create Vault"].tap()
-        XCTAssertTrue(app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout))
+        // The iPhone lands on the tile home; an iPad lands on the split view,
+        // whose preselected All list shows its own empty state.
+        let landed = app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout)
+            || app.staticTexts["Nothing Here"].waitForExistence(timeout: timeout)
+        XCTAssertTrue(landed, "vault creation did not land on an empty vault")
         declineBiometricOffer()
         capture("03-empty-vault")
 

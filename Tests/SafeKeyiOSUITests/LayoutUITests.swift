@@ -61,7 +61,11 @@ final class LayoutUITests: XCTestCase {
         if !create.isHittable { app.swipeUp() }
         create.tap()
 
-        XCTAssertTrue(app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout))
+        // The iPhone lands on the tile home; an iPad lands on the split view,
+        // whose preselected All list shows its own empty state.
+        let landed = app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout)
+            || app.staticTexts["Nothing Here"].waitForExistence(timeout: timeout)
+        XCTAssertTrue(landed, "vault creation did not land on an empty vault")
         declineBiometricOffer()
         captureScreen("landscape-02-empty-vault")
 

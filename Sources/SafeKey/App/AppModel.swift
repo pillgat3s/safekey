@@ -84,6 +84,15 @@ final class AppModel {
     /// from view bodies on every render.
     private(set) var canUnlockWithBiometrics = false
 
+    /// Whether the main window should offer Touch ID once for this vault. Set
+    /// when a different vault took this Mac's place — adopted from iCloud, or
+    /// restored from a backup. The biometric enrolment is keyed to the vault
+    /// it was made for, so it does not carry over, and a vault that arrived
+    /// without the question left people typing the password every time.
+    private(set) var biometricOfferPending = false
+
+    func clearBiometricOffer() { biometricOfferPending = false }
+
     func refreshBiometricAvailability() {
         guard let header = lockedHeader else {
             canUnlockWithBiometrics = false
@@ -166,6 +175,7 @@ final class AppModel {
     /// so a mistake here is recoverable.
     func adoptCloudVault(password: String) async throws {
         let (unlocked, _) = try await sync.fetchCloudVault(password: password)
+        let outgoing = session?.header.vaultID ?? lockedHeader?.vaultID
         if let current = try? await store.read() {
             try? await store.writeRescueCopy(current)
         }
@@ -174,6 +184,7 @@ final class AppModel {
         try await store.write(container)
         anchors.clear()
         adoptUnlockedSession(unlocked, container: container, store: store)
+        noteVaultReplaced(outgoing: outgoing, incoming: unlocked.header.vaultID)
     }
 
     /// What merging the iCloud vault into this one would add. Nothing is
@@ -270,6 +281,18 @@ final class AppModel {
             await refreshBiometricBlob(deviceKey: deviceKey, vaultID: updated.header.vaultID)
         }
         return deviceKey
+    }
+
+    /// A different vault has taken this Mac's place. The Keychain copy of the
+    /// outgoing vault's key goes with it — pruning only removed the marker,
+    /// and a stale key for a vault that is no longer here has no business
+    /// staying behind — and the newcomer is queued for the Touch ID offer
+    /// unless it is already set up on this Mac.
+    private func noteVaultReplaced(outgoing: UUID?, incoming: UUID) {
+        if let outgoing, outgoing != incoming {
+            try? biometricFactor.disable(vaultID: outgoing)
+        }
+        biometricOfferPending = !biometricFactor.isEnrolled(vaultID: incoming)
     }
 
     /// Rewrites the stored biometric key on every successful unlock.
@@ -417,6 +440,7 @@ final class AppModel {
     /// before touching anything on disk.
     func importVault(_ data: Data) async throws {
         let header = try VaultFileFormat.decode(data).header
+        let outgoing = session?.header.vaultID ?? lockedHeader?.vaultID
 
         autoLock.stop()
 
@@ -440,6 +464,7 @@ final class AppModel {
         lockedHeader = header
         tamperDetected = false
         state = .locked
+        noteVaultReplaced(outgoing: outgoing, incoming: header.vaultID)
         syncVolumeWatcher()
         refreshBiometricAvailability()
         refreshAttemptDisplay()

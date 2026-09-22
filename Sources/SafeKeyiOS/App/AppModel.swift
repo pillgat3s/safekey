@@ -38,6 +38,21 @@ final class AppModel {
     private(set) var remainingAttempts: Int?
     private(set) var canUnlockWithBiometrics = false
 
+    /// Where the last session's screens were when the vault locked, so the
+    /// next one can pick up there. Not observed: it is read once, when the
+    /// unlocked view is built, and written on every navigation step.
+    @ObservationIgnored var resume = ResumeState()
+
+    /// Whether the unlocked screen should offer Face ID once for this vault.
+    /// Set when a different vault took this device's place — adopted from
+    /// iCloud, or restored from a backup. The biometric enrolment is keyed to
+    /// the vault it was made for, so it does not carry over, and a vault that
+    /// arrived without the question left people typing the password every
+    /// time.
+    private(set) var biometricOfferPending = false
+
+    func clearBiometricOffer() { biometricOfferPending = false }
+
     /// Shares the Keychain service with `keychain`, so the biometric copy of
     /// the data key lives in the same namespace self-destruct wipes — and so
     /// an isolated (test) vault cannot reach the real one's biometric key.
@@ -216,6 +231,7 @@ final class AppModel {
     /// recoverable.
     func adoptCloudVault(password: String) async throws {
         let (unlocked, _) = try await sync.fetchCloudVault(password: password)
+        let outgoing = session?.header.vaultID ?? lockedHeader?.vaultID
         if let current = try? await store.read() {
             try? await store.writeRescueCopy(current)
         }
@@ -224,6 +240,7 @@ final class AppModel {
         try await store.write(container)
         anchors.clear()
         adopt(unlocked, container: container)
+        noteVaultReplaced(outgoing: outgoing, incoming: unlocked.header.vaultID)
     }
 
     /// What merging the iCloud vault into this one would add. Nothing is
@@ -304,6 +321,7 @@ final class AppModel {
 
     func importVault(_ data: Data) async throws {
         let header = try VaultFileFormat.decode(data).header
+        let outgoing = session?.header.vaultID ?? lockedHeader?.vaultID
         if let current = try? await store.read() {
             try? await store.writeRescueCopy(current)
         }
@@ -315,8 +333,21 @@ final class AppModel {
         lockedHeader = header
         tamperDetected = false
         state = .locked
+        noteVaultReplaced(outgoing: outgoing, incoming: header.vaultID)
         refreshBiometricAvailability()
         remainingAttempts = anchors.remainingAttempts()
+    }
+
+    /// A different vault has taken this device's place. The Keychain copy of
+    /// the outgoing vault's key goes with it — pruning only removed the marker,
+    /// and a stale key for a vault that is no longer here has no business
+    /// staying behind — and the newcomer is queued for the Face ID offer
+    /// unless it is already set up on this device.
+    private func noteVaultReplaced(outgoing: UUID?, incoming: UUID) {
+        if let outgoing, outgoing != incoming {
+            try? biometricFactor.disable(vaultID: outgoing)
+        }
+        biometricOfferPending = !biometricFactor.isEnrolled(vaultID: incoming)
     }
 
     // MARK: - Session adoption

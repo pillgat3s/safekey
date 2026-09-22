@@ -44,7 +44,14 @@ struct VaultHomeView: View {
     // folded away is not worth carrying inside an encrypted backup.
     @AppStorage("home.chainsExpanded") private var chainsExpanded = true
     @AppStorage("home.groupsExpanded") private var groupsExpanded = true
-    @State private var offerBiometrics = false
+    /// The navigation stack as values, written to the model on every step so
+    /// the next session can rebuild it after a lock.
+    @State private var path: [HomeRoute]
+
+    init(session: VaultSession, resume: [HomeRoute] = []) {
+        self.session = session
+        _path = State(initialValue: resume)
+    }
 
     private var columns: [GridItem] {
         [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
@@ -135,16 +142,14 @@ struct VaultHomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 if !searchText.isEmpty {
                     searchResults
                 } else {
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(categories) { category in
-                        NavigationLink {
-                            EntryListView(session: session, filter: category.filter, title: category.title)
-                        } label: {
+                        NavigationLink(value: HomeRoute.list(category.filter)) {
                             CategoryTile(category: category)
                         }
                         .buttonStyle(.plain)
@@ -189,9 +194,7 @@ struct VaultHomeView: View {
                     if chainsExpanded {
                     VStack(spacing: 0) {
                         ForEach(Array(orderedChains.enumerated()), id: \.element) { index, chain in
-                            NavigationLink {
-                                EntryListView(session: session, filter: .chain(chain), title: chain.displayName)
-                            } label: {
+                            NavigationLink(value: HomeRoute.list(.chain(chain))) {
                                 RowLabel(
                                     title: chain.displayName,
                                     count: session.entries.filter { $0.chain == chain }.count
@@ -214,9 +217,7 @@ struct VaultHomeView: View {
                     if groupsExpanded {
                     VStack(spacing: 0) {
                         ForEach(Array(session.groups.enumerated()), id: \.element) { index, group in
-                            NavigationLink {
-                                EntryListView(session: session, filter: .group(group.id), title: group.name)
-                            } label: {
+                            NavigationLink(value: HomeRoute.list(.group(group.id))) {
                                 RowLabel(
                                     title: group.name,
                                     subtitle: group.chain.displayName,
@@ -260,7 +261,15 @@ struct VaultHomeView: View {
                 }
             }
             .navigationTitle("SafeKey")
-
+            .navigationDestination(for: HomeRoute.self) { route in
+                switch route {
+                case .list(let filter):
+                    EntryListView(session: session, filter: filter, title: filter.title(in: session))
+                case .entry(let id):
+                    EntryDetailView(session: session, entryID: id)
+                }
+            }
+            .searchable(text: $searchText, prompt: "Search")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showingSettings = true } label: {
@@ -275,14 +284,13 @@ struct VaultHomeView: View {
                         Label("New Group", systemImage: "folder.badge.plus")
                     }
                 }
-                // Spacers split the bar into three floating pieces — button,
-                // search field, button — rather than one continuous bar. The
-                // search field lives here rather than under the title because
-                // `.searchable` has no bottom-bar placement on a NavigationStack.
+                // The system search field sits between the two buttons and
+                // takes whatever width is left, so it grows with the phone: a
+                // Pro Max gets the same edge-to-edge bar as the Passwords app
+                // rather than a short field inside wide margins. The spacers
+                // keep the three pieces floating separately.
                 ToolbarSpacer(.fixed, placement: .bottomBar)
-                ToolbarItem(placement: .bottomBar) {
-                    SearchPill(text: $searchText)
-                }
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarSpacer(.fixed, placement: .bottomBar)
                 ToolbarItem(placement: .bottomBar) {
                     Button { showingAdd = true } label: {
@@ -299,24 +307,11 @@ struct VaultHomeView: View {
             .sheet(isPresented: $showingNewGroup) {
                 NewGroupSheet(session: session)
             }
-            // Asked once, right after the vault is created, rather than left
-            // for the user to discover in Settings.
-            .task {
-                guard session.isNewlyCreated,
-                      BiometricFactor.isBiometryAvailable(),
-                      !model.biometricFactor.isEnrolled(vaultID: session.header.vaultID)
-                else { return }
-                session.isNewlyCreated = false
-                offerBiometrics = true
-            }
-            .alert("Unlock with \(model.biometryName)?", isPresented: $offerBiometrics) {
-                Button("Not Now", role: .cancel) {}
-                Button("Use \(model.biometryName)") {
-                    Task { try? await model.enableBiometricUnlock() }
-                }
-            } message: {
-                Text("You can open SafeKey with \(model.biometryName) instead of typing your master password. You will still need the password after a restart, and you can change this in Settings.")
-            }
+            .modifier(BiometricOffer(
+                session: session,
+                sheetsPresented: showingSettings || showingAdd || showingNewGroup
+            ))
+            .onChange(of: path) { _, current in model.resume.homePath = current }
             .alert("Rename Group", isPresented: renameBinding) {
                 TextField("Group name", text: $renameText)
                 Button("Cancel", role: .cancel) { renamingGroup = nil }
@@ -358,9 +353,7 @@ struct VaultHomeView: View {
         } else {
             VStack(spacing: 0) {
                 ForEach(Array(matches.enumerated()), id: \.element.id) { index, entry in
-                    NavigationLink {
-                        EntryDetailView(session: session, entryID: entry.id)
-                    } label: {
+                    NavigationLink(value: HomeRoute.entry(entry.id)) {
                         HStack {
                             EntryRow(entry: entry, groupName: session.group(id: entry.groupID)?.name)
                             Spacer(minLength: 8)
@@ -404,39 +397,6 @@ struct VaultHomeView: View {
 
     private var rowDivider: some View {
         Divider().padding(.leading, 52)
-    }
-}
-
-/// The bottom-bar search field.
-struct SearchPill: View {
-    @Binding var text: String
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.secondary)
-            TextField("Search", text: $text)
-                .textFieldStyle(.plain)
-                .submitLabel(.search)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .focused($focused)
-                .accessibilityIdentifier("home.search")
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                    focused = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .frame(minWidth: 180)
     }
 }
 

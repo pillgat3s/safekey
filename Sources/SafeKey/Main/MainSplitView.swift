@@ -8,6 +8,7 @@ struct MainSplitView: View {
     @State private var sidebarSelection: SidebarItem = .all
     @State private var selectedEntryID: WalletEntry.ID?
     @State private var searchText = ""
+    @State private var offeringTouchID = false
 
     var body: some View {
         NavigationSplitView {
@@ -38,6 +39,28 @@ struct MainSplitView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(session.saveError ?? "")
+        }
+        // Asked once when a different vault takes this Mac's place — adopted
+        // from iCloud, or restored from a backup — because the Touch ID
+        // enrolment was keyed to the vault that left. A vault behind a USB
+        // security key is excluded: enabling Touch ID for it needs the key
+        // file, and Settings has the flow for that.
+        .task(id: session.header.vaultID) {
+            guard model.biometricOfferPending,
+                  !session.header.unlockPolicy.requiresDevice,
+                  BiometricFactor.isBiometryAvailable(),
+                  !model.biometricFactor.isEnrolled(vaultID: session.header.vaultID)
+            else { return }
+            model.clearBiometricOffer()
+            offeringTouchID = true
+        }
+        .alert("Unlock with Touch ID?", isPresented: $offeringTouchID) {
+            Button("Not Now", role: .cancel) {}
+            Button("Use Touch ID") {
+                Task { try? await model.enableBiometricUnlock() }
+            }
+        } message: {
+            Text("This vault came from another device. You can open it on this Mac with Touch ID instead of typing its master password.")
         }
         // Coming back to the app is the moment to pick up what the phone did.
         // A Mac can sit unlocked all day, so syncing only at unlock would mean

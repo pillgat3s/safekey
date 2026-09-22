@@ -18,7 +18,16 @@ struct VaultSplitView: View {
         case group(UUID)
     }
 
-    @State private var selection: Selection? = .tile(.all)
+    @State private var selection: Selection?
+    /// Wallets pushed in the detail column, as values, for the same reason the
+    /// iPhone home screen keeps its path: to come back after a lock.
+    @State private var detailPath: [HomeRoute]
+
+    init(session: VaultSession, resume: ResumeState = ResumeState()) {
+        self.session = session
+        _selection = State(initialValue: resume.splitSelection ?? .tile(.all))
+        _detailPath = State(initialValue: resume.splitPath)
+    }
     @State private var showingAdd = false
     @State private var showingSettings = false
     @State private var showingNewGroup = false
@@ -51,6 +60,18 @@ struct VaultSplitView: View {
         .sheet(isPresented: $showingNewGroup) {
             NewGroupSheet(session: session)
         }
+        .onChange(of: selection) { _, current in
+            // A different list starts at its root; a wallet pushed over the
+            // old one would otherwise stay up over the new.
+            detailPath = []
+            model.resume.splitSelection = current
+            model.resume.splitPath = []
+        }
+        .onChange(of: detailPath) { _, current in model.resume.splitPath = current }
+        .modifier(BiometricOffer(
+            session: session,
+            sheetsPresented: showingSettings || showingAdd || showingNewGroup
+        ))
         .alert("Rename Group", isPresented: renameBinding) {
             TextField("Group name", text: $renameText)
             Button("Cancel", role: .cancel) { renamingGroup = nil }
@@ -159,14 +180,24 @@ struct VaultSplitView: View {
 
     @ViewBuilder
     private var detail: some View {
-        NavigationStack {
-            if let selection, let filter = filter(for: selection) {
-                EntryListView(session: session, filter: filter, title: title(for: selection))
-            } else {
-                ContentUnavailableView {
-                    Label("Select a Category", systemImage: "sidebar.left")
-                } description: {
-                    Text("Choose a category, chain, or group to see its wallets.")
+        NavigationStack(path: $detailPath) {
+            Group {
+                if let selection, let filter = filter(for: selection) {
+                    EntryListView(session: session, filter: filter, title: title(for: selection))
+                } else {
+                    ContentUnavailableView {
+                        Label("Select a Category", systemImage: "sidebar.left")
+                    } description: {
+                        Text("Choose a category, chain, or group to see its wallets.")
+                    }
+                }
+            }
+            .navigationDestination(for: HomeRoute.self) { route in
+                switch route {
+                case .list(let filter):
+                    EntryListView(session: session, filter: filter, title: filter.title(in: session))
+                case .entry(let id):
+                    EntryDetailView(session: session, entryID: id)
                 }
             }
         }

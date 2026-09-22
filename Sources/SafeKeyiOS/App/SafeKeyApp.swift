@@ -69,10 +69,13 @@ struct RootView: View {
             // compact width — every iPhone, and iPad slide-over — gets the
             // tile home screen. Driven by size class rather than device so
             // multitasking picks the right one on its own.
+            // Either one picks up where the last session was: the model kept
+            // the route, as identifiers, across the lock.
+            let resume = model.resume.validated(in: session)
             if horizontalSizeClass == .regular {
-                VaultSplitView(session: session)
+                VaultSplitView(session: session, resume: resume)
             } else {
-                VaultHomeView(session: session)
+                VaultHomeView(session: session, resume: resume.homePath)
             }
         }
     }

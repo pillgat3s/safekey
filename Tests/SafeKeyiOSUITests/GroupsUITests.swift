@@ -35,7 +35,7 @@ final class GroupsUITests: XCTestCase {
         super.tearDown()
     }
 
-    private func createVault() {
+    private func createVault() throws {
         app.launch()
         dismissWelcome()
         let password = app.secureTextFields["onboarding.password"]
@@ -46,8 +46,16 @@ final class GroupsUITests: XCTestCase {
         confirm.tap()
         confirm.typeText(masterPassword)
         app.buttons["Create Vault"].tap()
-        XCTAssertTrue(app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout))
+        // The iPhone lands on the tile home; an iPad lands on the split view,
+        // whose preselected All list shows its own empty state.
+        let landed = app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout)
+            || app.staticTexts["Nothing Here"].waitForExistence(timeout: timeout)
+        XCTAssertTrue(landed, "vault creation did not land on an empty vault")
         declineBiometricOffer()
+        try XCTSkipUnless(
+            app.buttons["tile.All"].waitForExistence(timeout: 3),
+            "group rows live on the iPhone tile home; the iPad sidebar lists groups its own way"
+        )
     }
 
     /// Creates a group from the bottom bar, the way the app offers it.
@@ -117,14 +125,14 @@ final class GroupsUITests: XCTestCase {
         app.navigationBars.buttons.firstMatch.tap()
     }
 
-    func testCreatedGroupIsListedOnHome() {
-        createVault()
+    func testCreatedGroupIsListedOnHome() throws {
+        try createVault()
         createGroup(named: "Day Trading")
         XCTAssertTrue(app.staticTexts["Day Trading"].waitForExistence(timeout: timeout))
     }
 
-    func testRenamingAGroupUpdatesTheWalletRow() {
-        createVault()
+    func testRenamingAGroupUpdatesTheWalletRow() throws {
+        try createVault()
         createGroup(named: "Day Trading")
         addWallet(name: "Trading")
         assignGroup("Day Trading", toWalletNamed: "Trading")
@@ -152,8 +160,8 @@ final class GroupsUITests: XCTestCase {
     }
 
     /// Deleting a group must keep its wallets.
-    func testDeletingAGroupKeepsItsWallets() {
-        createVault()
+    func testDeletingAGroupKeepsItsWallets() throws {
+        try createVault()
         createGroup(named: "Day Trading")
         addWallet(name: "Trading")
         assignGroup("Day Trading", toWalletNamed: "Trading")

@@ -58,7 +58,11 @@ final class BiometricUnlockUITests: XCTestCase {
         confirm.tap()
         confirm.typeText(masterPassword)
         app.buttons["Create Vault"].tap()
-        XCTAssertTrue(app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout))
+        // The iPhone lands on the tile home; an iPad lands on the split view,
+        // whose preselected All list shows its own empty state.
+        let landed = app.staticTexts["No Wallets Yet"].waitForExistence(timeout: timeout)
+            || app.staticTexts["Nothing Here"].waitForExistence(timeout: timeout)
+        XCTAssertTrue(landed, "vault creation did not land on an empty vault")
 
         // Settings → enable biometric unlock
         app.buttons["Settings"].tap()

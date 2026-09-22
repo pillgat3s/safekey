@@ -194,6 +194,37 @@ final class VaultFlowUITests: XCTestCase {
         )
     }
 
+    /// Locking is not a reset. The vault relocks whenever the app leaves the
+    /// foreground, and coming back should land on the wallet that was open —
+    /// the way a credential vault does — rather than on the home grid.
+    func testUnlockingReturnsToTheWalletThatWasOpen() {
+        launch()
+        createVault()
+        addEntry(name: "Main Wallet", secret: "0xabc123")
+
+        openAll()
+        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: timeout))
+        app.staticTexts["Main Wallet"].tap()
+        XCTAssertTrue(app.buttons["detail.secretRow"].waitForExistence(timeout: timeout))
+
+        lock()
+        type(masterPassword + "\n", into: lockPasswordField)
+
+        XCTAssertTrue(
+            app.buttons["detail.secretRow"].waitForExistence(timeout: timeout),
+            "unlocking should return to the wallet that was open"
+        )
+        XCTAssertFalse(app.buttons["tile.All"].exists, "the home grid must not be what comes back")
+        XCTAssertFalse(
+            app.staticTexts["detail.secret"].exists,
+            "the secret must come back hidden, whatever it was before the lock"
+        )
+
+        // And the stack underneath is intact: back leads to the list, not home.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["All"].waitForExistence(timeout: timeout))
+    }
+
     /// The core promise: data survives a lock, and only the right password opens it.
     func testEntrySurvivesLockAndUnlock() {
         launch()
@@ -257,7 +288,10 @@ final class VaultFlowUITests: XCTestCase {
         addEntry(name: "Main Wallet", secret: "0xaaa111")
         addEntry(name: "Cold Storage", secret: "0xbbb222")
 
-        let search = app.textFields["home.search"]
+        // The system search field in the bottom bar; it carries no
+        // identifier of ours, and it is the only search field on the home
+        // screen.
+        let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: timeout))
         search.tap()
         search.typeText("Cold")
