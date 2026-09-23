@@ -53,62 +53,58 @@ struct EntryDetailView: View {
                                 }
                             }
                             .accessibilityIdentifier("detail.addressRow")
-                            .contextMenu {
-                                Button {
-                                    copy(address, label: "Address copied")
-                                } label: {
-                                    Label("Copy Address", systemImage: "doc.on.doc")
-                                }
-                                ShareLink(item: address) {
-                                    Label("Share Address", systemImage: "square.and.arrow.up")
-                                }
-                            }
                         }
 
                         // The secret: a row of dots that reveals in place when
-                        // tapped, hides when tapped again, and carries Copy on
-                        // a long press. No menu between you and the value. A
-                        // key or a phrase is too long for the right-hand side,
-                        // so a revealed value drops under its label.
-                        Button {
-                            toggleReveal(entry)
-                        } label: {
-                            if revealed {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(entry.kind.shortName)
-                                        .foregroundStyle(Color.primary)
-                                    if entry.kind.isSeedPhrase {
-                                        SeedPhraseGrid(phrase: entry.secret)
-                                    } else {
-                                        Text(entry.secret)
-                                            .font(.callout.monospaced())
-                                            .foregroundStyle(Color.secondary)
-                                            .accessibilityIdentifier("detail.secret")
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                            } else {
-                                row(entry.kind.shortName) {
-                                    // A fixed run of dots: the mask must not
-                                    // leak the secret's length.
-                                    Text(String(repeating: "•", count: 8))
-                                        .font(.body.monospaced())
-                                }
-                            }
-                        }
-                        .accessibilityIdentifier("detail.secretRow")
-                        .contextMenu {
-                            Button {
-                                copy(entry.secret, label: "\(entry.kind.shortName) copied")
-                            } label: {
-                                Label("Copy \(entry.kind.shortName)", systemImage: "doc.on.doc")
-                            }
+                        // tapped and hides when tapped again, with its own Copy
+                        // button so copying never needs the value on screen.
+                        // Deliberately no long-press menu: iOS 27 appends an
+                        // "Ask Siri" item to every context menu, and a private
+                        // key must never sit one tap from leaving the device
+                        // that way. A key or a phrase is too long for the
+                        // right-hand side, so a revealed value drops under its
+                        // label.
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Button {
                                 toggleReveal(entry)
                             } label: {
-                                Label(revealed ? "Hide" : "Reveal", systemImage: revealed ? "eye.slash" : "eye")
+                                if revealed {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(entry.kind.shortName)
+                                            .foregroundStyle(Color.primary)
+                                        if entry.kind.isSeedPhrase {
+                                            SeedPhraseGrid(phrase: entry.secret)
+                                        } else {
+                                            Text(entry.secret)
+                                                .font(.callout.monospaced())
+                                                .foregroundStyle(Color.secondary)
+                                                .accessibilityIdentifier("detail.secret")
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                } else {
+                                    row(entry.kind.shortName) {
+                                        // A fixed run of dots: the mask must not
+                                        // leak the secret's length.
+                                        Text(String(repeating: "•", count: 8))
+                                            .font(.body.monospaced())
+                                    }
+                                }
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("detail.secretRow")
+
+                            Button {
+                                copy(entry.secret, label: "\(entry.kind.shortName) copied")
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.callout)
+                                    .foregroundStyle(Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Copy \(entry.kind.shortName)")
+                            .accessibilityIdentifier("detail.copySecret")
                         }
 
                         row("Chain") { Text(entry.chain.displayName) }
