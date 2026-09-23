@@ -5,6 +5,7 @@ import SafeKeyCore
 struct EntryDetailView: View {
     let session: VaultSession
     let entryID: WalletEntry.ID
+    @Environment(AppModel.self) private var model
 
     @State private var revealed = false
     private let capture = ScreenCapture.shared
@@ -24,6 +25,7 @@ struct EntryDetailView: View {
                     Section {
                         VStack(spacing: 12) {
                             ChainLogo(chain: entry.chain, size: 88)
+                                .onAppear { UnlockTrace.mark("detail-appeared") }
                             Text(entry.name)
                                 .font(.title.bold())
                                 .multilineTextAlignment(.center)
@@ -34,36 +36,67 @@ struct EntryDetailView: View {
                         .listRowSeparator(.hidden)
                     }
 
-                    // The secret, presented the way the Passwords app presents
-                    // a password: a captioned row of dots that reveals in place
-                    // when tapped, hides when tapped again, and carries Copy on
-                    // a long press. No menu between you and the value.
+                    // One card for everything, the way the Passwords app lays
+                    // out a credential: address first — it is what gets copied
+                    // and shared — then the secret, then the bookkeeping. Every
+                    // row is a label on the left and a value on the right.
                     Section {
+                        if let address = entry.publicAddress, !address.isEmpty {
+                            Button {
+                                copy(address, label: "Address copied")
+                            } label: {
+                                row("Address") {
+                                    Text(address)
+                                        .font(.callout.monospaced())
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                            }
+                            .accessibilityIdentifier("detail.addressRow")
+                            .contextMenu {
+                                Button {
+                                    copy(address, label: "Address copied")
+                                } label: {
+                                    Label("Copy Address", systemImage: "doc.on.doc")
+                                }
+                                ShareLink(item: address) {
+                                    Label("Share Address", systemImage: "square.and.arrow.up")
+                                }
+                            }
+                        }
+
+                        // The secret: a row of dots that reveals in place when
+                        // tapped, hides when tapped again, and carries Copy on
+                        // a long press. No menu between you and the value. A
+                        // key or a phrase is too long for the right-hand side,
+                        // so a revealed value drops under its label.
                         Button {
                             toggleReveal(entry)
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.kind.shortName)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                if revealed, entry.kind.isSeedPhrase {
-                                    SeedPhraseGrid(phrase: entry.secret)
-                                } else if revealed {
-                                    Text(entry.secret)
-                                        .font(.callout.monospaced())
-                                        .accessibilityIdentifier("detail.secret")
-                                } else {
+                            if revealed {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(entry.kind.shortName)
+                                        .foregroundStyle(Color.primary)
+                                    if entry.kind.isSeedPhrase {
+                                        SeedPhraseGrid(phrase: entry.secret)
+                                    } else {
+                                        Text(entry.secret)
+                                            .font(.callout.monospaced())
+                                            .foregroundStyle(Color.secondary)
+                                            .accessibilityIdentifier("detail.secret")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            } else {
+                                row(entry.kind.shortName) {
                                     // A fixed run of dots: the mask must not
                                     // leak the secret's length.
                                     Text(String(repeating: "•", count: 8))
                                         .font(.body.monospaced())
-                                        .foregroundStyle(.primary)
                                 }
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
                         .accessibilityIdentifier("detail.secretRow")
                         .contextMenu {
                             Button {
@@ -77,27 +110,8 @@ struct EntryDetailView: View {
                                 Label(revealed ? "Hide" : "Reveal", systemImage: revealed ? "eye.slash" : "eye")
                             }
                         }
-                    }
 
-                    Section {
-                        if let address = entry.publicAddress, !address.isEmpty {
-                            Menu {
-                                Button {
-                                    copy(address, label: "Address copied")
-                                } label: {
-                                    Label("Copy Address", systemImage: "doc.on.doc")
-                                }
-                            } label: {
-                                LabeledContent("Address") {
-                                    Text(address)
-                                        .font(.callout.monospaced())
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                }
-                            }
-                        }
-
-                        LabeledContent("Chain", value: entry.chain.displayName)
+                        row("Chain") { Text(entry.chain.displayName) }
 
                         // The group is chosen here, the way iOS lets you move a
                         // credential between groups from its own screen.
@@ -116,7 +130,7 @@ struct EntryDetailView: View {
                                 Label("New Group…", systemImage: "plus.circle")
                             }
                         } label: {
-                            LabeledContent("Group") {
+                            row("Group") {
                                 HStack(spacing: 4) {
                                     Text(session.group(id: entry.groupID)?.name ?? "None")
                                     Image(systemName: "chevron.up.chevron.down")
@@ -127,17 +141,19 @@ struct EntryDetailView: View {
                         .accessibilityIdentifier("detail.groupRow")
 
                         if !entry.tags.isEmpty {
-                            LabeledContent("Tags", value: entry.tags.joined(separator: ", "))
+                            row("Tags") { Text(entry.tags.joined(separator: ", ")) }
                         }
 
-                        LabeledContent(
-                            "Modified",
-                            value: entry.modifiedAt.formatted(date: .abbreviated, time: .omitted)
-                        )
-                    }
+                        row("Modified") {
+                            Text(entry.modifiedAt.formatted(date: .abbreviated, time: .omitted))
+                        }
 
-                    if !entry.notes.isEmpty {
-                        Section("Notes") { Text(entry.notes) }
+                        if !entry.notes.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Notes")
+                                Text(entry.notes).foregroundStyle(Color.secondary)
+                            }
+                        }
                     }
                 }
                 .navigationTitle("")
@@ -147,13 +163,15 @@ struct EntryDetailView: View {
                     // route to any app on the phone, and a seed phrase that
                     // leaves through it is unrecoverable — so the secret is
                     // reachable by Copy, which is deliberate and local, and
-                    // never by Share.
+                    // never by Share. The spacer keeps Share and Edit as two
+                    // separate pieces, as the Passwords app has them.
                     if let address = entry.publicAddress, !address.isEmpty {
                         ToolbarItem(placement: .topBarTrailing) {
                             ShareLink(item: address) {
                                 Label("Share Address", systemImage: "square.and.arrow.up")
                             }
                         }
+                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Edit") { isEditing = true }
@@ -196,6 +214,24 @@ struct EntryDetailView: View {
         }
     }
 
+    /// A label on the left, a value on the right — the row every fact in the
+    /// card shares. The colours are the concrete label colours, not the
+    /// hierarchical `.primary`/`.secondary` styles: those are relative to the
+    /// current foreground, and inside a `Button` or a `Menu` that is the
+    /// accent colour, which turned the whole row blue.
+    private func row<Value: View>(_ label: String, @ViewBuilder value: () -> Value) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .foregroundStyle(Color.primary)
+            Spacer(minLength: 12)
+            value()
+                .foregroundStyle(Color.secondary)
+                .multilineTextAlignment(.trailing)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+    }
+
     private func groupBinding(for entry: WalletEntry) -> Binding<UUID?> {
         Binding(
             get: { entry.groupID },
@@ -218,7 +254,9 @@ struct EntryDetailView: View {
             show("Unavailable while the screen is recorded or mirrored")
         } else {
             Task {
-                if await session.authorizeReveal() {
+                // The prompt makes the scene inactive; the model keeps the
+                // privacy cover from treating that as leaving the app.
+                if await session.authorizeReveal(onPrompt: { model.noteAuthenticationPrompt() }) {
                     withAnimation { revealed = true }
                 } else {
                     // Without this the button looks broken: a declined or
@@ -263,7 +301,9 @@ struct SeedPhraseGrid: View {
                 HStack(spacing: 6) {
                     Text("\(index + 1)")
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        // Concrete, not hierarchical: the grid sits inside the
+                        // secret row's button, whose foreground is the tint.
+                        .foregroundStyle(Color(.tertiaryLabel))
                         .frame(width: 20, alignment: .trailing)
                     Text(word)
                         .font(.callout.monospaced())

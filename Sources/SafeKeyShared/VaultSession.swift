@@ -207,7 +207,9 @@ final class VaultSession {
 
     /// Enforces the "require authentication to reveal" setting using system
     /// authentication (Touch ID or the login password).
-    func authorizeReveal() async -> Bool {
+    /// `onPrompt` runs just before the system prompt is raised, and not at
+    /// all when the policy lets the reveal through without one.
+    func authorizeReveal(onPrompt: (() -> Void)? = nil) async -> Bool {
         switch settings.revealPolicy {
         case .never:
             return true
@@ -219,6 +221,7 @@ final class VaultSession {
         case .everyTime:
             break
         }
+        onPrompt?()
         let context = LAContext()
         do {
             let success = try await context.evaluatePolicy(

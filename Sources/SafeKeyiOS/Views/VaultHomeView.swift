@@ -312,6 +312,7 @@ struct VaultHomeView: View {
                 sheetsPresented: showingSettings || showingAdd || showingNewGroup
             ))
             .onChange(of: path) { _, current in model.resume.homePath = current }
+            .onAppear { UnlockTrace.mark("home-appeared") }
             .alert("Rename Group", isPresented: renameBinding) {
                 TextField("Group name", text: $renameText)
                 Button("Cancel", role: .cancel) { renamingGroup = nil }

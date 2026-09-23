@@ -81,11 +81,19 @@ struct LockScreenView: View {
         // in the background.
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
-            case .active: armIfNeeded()
-            case .background: armed = false
-            default: break
+            case .active:
+                UnlockTrace.begin("resume")
+                UnlockTrace.mark("scene-active")
+                armIfNeeded()
+            case .inactive:
+                UnlockTrace.mark("scene-inactive")
+            case .background:
+                armed = false
+            @unknown default:
+                break
             }
         }
+        .onAppear { UnlockTrace.mark("lock-appeared") }
     }
 
     @ViewBuilder
@@ -174,6 +182,7 @@ struct LockScreenView: View {
         // interrupted by the prompt.
         guard !armed, model.canUnlockWithBiometrics, password.isEmpty else { return }
         armed = true
+        UnlockTrace.mark("armed")
         unlockWithBiometrics()
     }
 

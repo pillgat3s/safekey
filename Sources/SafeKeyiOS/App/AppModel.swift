@@ -38,6 +38,17 @@ final class AppModel {
     private(set) var remainingAttempts: Int?
     private(set) var canUnlockWithBiometrics = false
 
+    /// True from the moment a biometric prompt is requested until the scene is
+    /// active again. The system's Face ID panel makes the scene inactive like
+    /// any other interruption, and it lingers a couple of seconds after a
+    /// match; the privacy cover has to leave that window alone, or every
+    /// unlock ends with the freshly opened vault hidden behind a blank screen
+    /// for as long as the panel stays.
+    private(set) var isAuthenticating = false
+
+    func noteAuthenticationPrompt() { isAuthenticating = true }
+    func noteSceneActive() { isAuthenticating = false }
+
     /// Where the last session's screens were when the vault locked, so the
     /// next one can pick up there. Not observed: it is read once, when the
     /// unlocked view is built, and written on every navigation step.
@@ -116,8 +127,11 @@ final class AppModel {
     // MARK: - Lifecycle
 
     func bootstrap() async {
+        UnlockTrace.begin("launch")
         if await store.vaultExists() {
+            UnlockTrace.mark("exists")
             await refreshLockedState()
+            UnlockTrace.mark("locked-state")
             state = .locked
         } else {
             state = .noVault
@@ -147,6 +161,7 @@ final class AppModel {
     }
 
     func lock() {
+        isAuthenticating = false
         sync.cancelPendingWork()
         guard case .unlocked = state else { return }
         lockedHeader = session?.header
@@ -168,11 +183,15 @@ final class AppModel {
     }
 
     func unlock(password: String) async throws {
+        UnlockTrace.begin("password")
+        UnlockTrace.mark("unlock-start")
         let container = try await store.read()
+        UnlockTrace.mark("read")
         do {
             let unlocked = try await Task.detached(priority: .userInitiated) {
                 try Vault.unlock(container: container, password: password)
             }.value
+            UnlockTrace.mark("derive+decrypt")
             adopt(unlocked, container: container)
         } catch VaultError.wrongPassword {
             try await registerFailedAttempt(container: container)
@@ -188,6 +207,9 @@ final class AppModel {
 
     func unlockWithBiometrics(context: LAContext? = nil) async throws {
         guard let header = lockedHeader else { throw BiometricError.notEnrolled }
+        UnlockTrace.begin("biometrics")
+        UnlockTrace.mark("unlock-start")
+        isAuthenticating = true
         let blob: Data
         do {
             blob = try await biometricFactor.obtainSecret(
@@ -200,14 +222,20 @@ final class AppModel {
             refreshBiometricAvailability()
             throw BiometricError.notEnrolled
         }
+        UnlockTrace.mark("keychain+prompt")
         let container = try await store.read()
+        UnlockTrace.mark("read")
         let unlocked = try Vault.unlock(container: container, dek: SymmetricKey(data: blob))
-        adopt(unlocked, container: container)
+        UnlockTrace.mark("decrypt")
+        // The key was just read through Face ID, so it is demonstrably intact;
+        // rewriting it here would be work for nothing.
+        adopt(unlocked, container: container, biometricKeyJustProved: true)
     }
 
     @discardableResult
     func enableBiometricUnlock(confirm: Bool = true) async throws -> BiometricFactor.Strategy {
         guard let session else { throw BiometricError.notEnrolled }
+        if confirm { isAuthenticating = true }
         let blob = session.dek.withUnsafeBytes { Data($0) }
         return try await biometricFactor.enable(
             secret: blob,
@@ -352,20 +380,37 @@ final class AppModel {
 
     // MARK: - Session adoption
 
-    private func adopt(_ unlocked: Vault.Unlocked, container: Data) {
-        anchors.pin(container: container)
+    private func adopt(_ unlocked: Vault.Unlocked, container: Data, biometricKeyJustProved: Bool = false) {
         tamperDetected = false
-        remainingAttempts = anchors.remainingAttempts()
+        // A successful unlock resets the attempt count — that is what the pin
+        // below records — so the value is known without reading it back.
+        let policy = unlocked.header.selfDestruct
+        remainingAttempts = policy.enabled ? policy.maxAttempts : nil
         biometricFactor.pruneStrategyMarkers(keeping: unlocked.header.vaultID)
         Task { await store.clearRescueCopy() }
-        reprovisionBiometricKeyIfEnabled(unlocked)
+        if !biometricKeyJustProved {
+            reprovisionBiometricKeyIfEnabled(unlocked)
+        }
         let session = VaultSession(unlocked: unlocked, store: store, onPersist: { [weak self] written, _ in
             self?.anchors.pin(container: written)
         })
         sync.attach(to: session)
         state = .unlocked(session)
+        UnlockTrace.mark("state")
+        // Pinning is a handful of Keychain round trips plus a file write —
+        // about 50 ms on a phone — and it was holding the first frame of the
+        // opened vault back. It can run beside the UI; nothing below reads it.
+        let anchors = self.anchors
+        Task.detached(priority: .userInitiated) {
+            anchors.pin(container: container)
+            await UnlockTrace.mark("pin")
+        }
         // Pull anything the other device added while this one was locked.
         Task { [weak self] in await self?.sync.syncIfEnabled(session: session) }
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            UnlockTrace.flush()
+        }
     }
 
     /// Rewrites the biometric key on each unlock so its Keychain protection
@@ -374,12 +419,15 @@ final class AppModel {
         guard biometricFactor.isEnabled(vaultID: unlocked.header.vaultID) else { return }
         let blob = unlocked.dek.withUnsafeBytes { Data($0) }
         Task { [weak self] in
+            UnlockTrace.mark("reprovision-begin")
             _ = try? await self?.biometricFactor.enable(
                 secret: blob,
                 vaultID: unlocked.header.vaultID,
                 confirm: false
             )
+            UnlockTrace.mark("reprovision-written")
             self?.refreshBiometricAvailability()
+            UnlockTrace.mark("reprovision-done")
         }
     }
 }

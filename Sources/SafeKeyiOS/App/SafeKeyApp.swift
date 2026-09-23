@@ -37,7 +37,13 @@ struct SafeKeyApp: App {
                 // the app-switcher snapshot around the transition, and the
                 // switcher is where a shoulder-surfer looks. Covering from
                 // `.inactive` means the snapshot can only ever contain this.
-                if scenePhase != .active {
+                //
+                // A prompt of our own is the exception. The Face ID panel makes
+                // the scene inactive as well, and stays up for a couple of
+                // seconds after a match; covering the opened vault for that
+                // long read as the app hanging on every unlock. The cover sits
+                // out from the prompt until the scene is active again.
+                if scenePhase != .active, !model.isAuthenticating {
                     PrivacyCover()
                         .transition(.opacity)
                 }
@@ -47,6 +53,8 @@ struct SafeKeyApp: App {
                 // Leaving the foreground on a phone is the equivalent of
                 // walking away from a desk.
                 if phase == .background { model.lock() }
+                if phase == .active { model.noteSceneActive() }
+                UnlockTrace.mark("app-phase-\(phase)")
             }
         }
     }
