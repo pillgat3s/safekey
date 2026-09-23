@@ -72,13 +72,20 @@ struct EntryDetailView: View {
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text(entry.kind.shortName)
                                             .foregroundStyle(Color.primary)
-                                        if entry.kind.isSeedPhrase {
-                                            SeedPhraseGrid(phrase: entry.secret)
-                                        } else {
-                                            Text(entry.secret)
-                                                .font(.callout.monospaced())
-                                                .foregroundStyle(Color.secondary)
-                                                .accessibilityIdentifier("detail.secret")
+                                        // On the secure layer: visible to the
+                                        // eye, blank in a screenshot or a
+                                        // recording, as the Passwords app does
+                                        // for a password.
+                                        ScreenshotHidden {
+                                            if entry.kind.isSeedPhrase {
+                                                SeedPhraseGrid(phrase: entry.secret)
+                                            } else {
+                                                Text(entry.secret)
+                                                    .font(.callout.monospaced())
+                                                    .foregroundStyle(Color.secondary)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .accessibilityIdentifier("detail.secret")
+                                            }
                                         }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
