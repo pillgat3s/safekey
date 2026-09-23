@@ -29,6 +29,11 @@ struct SafeKeyApp: App {
             ZStack {
                 RootView()
                     .environment(model)
+                    // Writing Tools would hand any selected text — a seed
+                    // phrase in the editor, say — to Apple Intelligence.
+                    // Off for every field in the app; nothing typed into a
+                    // vault is prose that needs rewriting.
+                    .writingToolsBehavior(.disabled)
                     .task {
                         if case .loading = model.state { await model.bootstrap() }
                     }
