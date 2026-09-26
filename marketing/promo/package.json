@@ -1,0 +1,25 @@
+{
+  "name": "safekey-promo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "The SafeKey promotional film, composed as code.",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render SafeKeyPromo out/safekey-promo.mp4",
+    "still": "remotion still SafeKeyPromo"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.529",
+    "@remotion/google-fonts": "^4.0.529",
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.529"
+  },
+  "devDependencies": {
+    "@remotion/bundler": "^4.0.529",
+    "@remotion/renderer": "^4.0.529",
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}
