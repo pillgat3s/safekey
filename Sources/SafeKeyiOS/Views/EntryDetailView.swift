@@ -82,6 +82,12 @@ struct EntryDetailView: View {
                                             } else {
                                                 Text(entry.secret)
                                                     .font(.callout.monospaced())
+                                                    // A key is not a word: typeset
+                                                    // it as having no language, or
+                                                    // the line breaker hyphenates
+                                                    // it and a hyphen that is not
+                                                    // part of the key appears.
+                                                    .typesettingLanguage(.init(identifier: "zxx"))
                                                     .foregroundStyle(Color.secondary)
                                                     .frame(maxWidth: .infinity, alignment: .leading)
                                                     .accessibilityIdentifier("detail.secret")
@@ -298,27 +304,43 @@ struct SeedPhraseGrid: View {
         phrase.split(whereSeparator: \.isWhitespace).map(String.init)
     }
 
+    // An eager Grid, not a LazyVGrid: twenty-four cells gain nothing from
+    // laziness, and inside the screenshot-proof host — a hosting controller
+    // outside any scroll view — a lazy container has no visible region of
+    // its own to decide what to draw from.
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
-            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                HStack(spacing: 6) {
-                    Text("\(index + 1)")
-                        .font(.caption2.monospacedDigit())
-                        // Concrete, not hierarchical: the grid sits inside the
-                        // secret row's button, whose foreground is the tint.
-                        .foregroundStyle(Color(.tertiaryLabel))
-                        .frame(width: 20, alignment: .trailing)
-                    Text(word)
-                        .font(.callout.monospaced())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Spacer(minLength: 0)
+        Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+            ForEach(Array(stride(from: 0, to: words.count, by: 2)), id: \.self) { index in
+                GridRow {
+                    cell(index)
+                    if index + 1 < words.count {
+                        cell(index + 1)
+                    } else {
+                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                    }
                 }
-                .padding(.vertical, 5)
-                .padding(.horizontal, 8)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func cell(_ index: Int) -> some View {
+        HStack(spacing: 6) {
+            Text("\(index + 1)")
+                .font(.caption2.monospacedDigit())
+                // Concrete, not hierarchical: the grid sits inside the
+                // secret row's button, whose foreground is the tint.
+                .foregroundStyle(Color(.tertiaryLabel))
+                .frame(width: 20, alignment: .trailing)
+            Text(words[index])
+                .font(.callout.monospaced())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
     }
 }

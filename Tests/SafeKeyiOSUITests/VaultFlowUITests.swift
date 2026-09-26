@@ -194,6 +194,29 @@ final class VaultFlowUITests: XCTestCase {
         )
     }
 
+    /// Revealing a seed phrase shows every word, numbered, first to last. The
+    /// grid sits inside the screenshot-proof host, so this is also the check
+    /// that the host lays its content out in full.
+    func testRevealingASeedPhraseShowsEveryWord() {
+        launch()
+        createVault()
+        addEntry(name: "Paper Backup",
+                 secret: "orbit velvet canyon harbor timber silent garden pilot crystal bridge echo fabric",
+                 seedPhrase: true)
+
+        openAll()
+        XCTAssertTrue(app.staticTexts["Paper Backup"].waitForExistence(timeout: timeout))
+        app.staticTexts["Paper Backup"].tap()
+        let secretRow = app.buttons["detail.secretRow"]
+        XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.staticTexts["velvet"].exists, "the words must not render before Reveal")
+
+        secretRow.tap()
+        XCTAssertTrue(app.staticTexts["orbit"].waitForExistence(timeout: timeout), "the first word is missing")
+        XCTAssertTrue(app.staticTexts["fabric"].exists, "the last word is missing")
+        XCTAssertTrue(app.staticTexts["12"].exists, "the words should be numbered")
+    }
+
     /// Locking is not a reset. The vault relocks whenever the app leaves the
     /// foreground, and coming back should land on the wallet that was open —
     /// the way a credential vault does — rather than on the home grid.

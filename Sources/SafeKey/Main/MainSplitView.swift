@@ -68,5 +68,18 @@ struct MainSplitView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.sync.syncIfEnabled(session: session) }
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: PromoDirector.command)) { note in
+            switch note.object as? PromoDirector.Command {
+            case .select(let item)?:
+                sidebarSelection = item
+                selectedEntryID = nil
+            case .open(let name)?:
+                selectedEntryID = session.entries.first { $0.name == name }?.id
+            default:
+                break
+            }
+        }
+        #endif
     }
 }

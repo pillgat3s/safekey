@@ -9,6 +9,19 @@ struct SecretRevealRow: View {
     @State private var revealed = false
 
     var body: some View {
+        content
+        #if DEBUG
+            .onReceive(NotificationCenter.default.publisher(for: PromoDirector.command)) { note in
+                switch note.object as? PromoDirector.Command {
+                case .reveal?: withAnimation(.easeOut(duration: 0.15)) { revealed = true }
+                case .hide?: withAnimation(.easeOut(duration: 0.15)) { revealed = false }
+                default: break
+                }
+            }
+        #endif
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(entry.kind.shortName)
@@ -46,6 +59,10 @@ struct SecretRevealRow: View {
                 } else {
                     Text(entry.secret)
                         .font(.callout.monospaced())
+                        // A key is not a word: typeset it as having no
+                        // language, or a wrapped line gains a hyphen that is
+                        // not part of the key.
+                        .typesettingLanguage(.init(identifier: "zxx"))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

@@ -128,6 +128,9 @@ final class AppModel {
 
     func bootstrap() async {
         UnlockTrace.begin("launch")
+        #if DEBUG
+        if await seedPromoVaultIfRequested() { return }
+        #endif
         if await store.vaultExists() {
             UnlockTrace.mark("exists")
             await refreshLockedState()
@@ -377,6 +380,33 @@ final class AppModel {
         }
         biometricOfferPending = !biometricFactor.isEnrolled(vaultID: incoming)
     }
+
+    #if DEBUG
+    /// `--promo`, alongside `--uitest`, fills an empty scratch vault with the
+    /// marketing demo content and turns Face ID on for it, so a filmed tour
+    /// starts from a lived-in vault. Only ever touches the scratch store the
+    /// `--uitest` flag selected; a vault that already exists is left alone.
+    private func seedPromoVaultIfRequested() async -> Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--promo"), arguments.contains("--uitest"),
+              !(await store.vaultExists()) else { return false }
+        do {
+            let (container, unlocked) = try Vault.create(
+                password: PromoContent.password,
+                payload: PromoContent.payload()
+            )
+            try await store.write(container)
+            anchors.clear()
+            adopt(unlocked, container: container)
+            if BiometricFactor.isBiometryAvailable() {
+                _ = try? await enableBiometricUnlock(confirm: false)
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+    #endif
 
     // MARK: - Session adoption
 

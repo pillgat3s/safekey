@@ -35,7 +35,9 @@ final class SecureCanvasHost<Content: View>: UIView {
         get { host.rootView }
         set {
             host.rootView = newValue
+            host.view.invalidateIntrinsicContentSize()
             invalidateIntrinsicContentSize()
+            setNeedsLayout()
         }
     }
 
@@ -45,13 +47,16 @@ final class SecureCanvasHost<Content: View>: UIView {
         backgroundColor = .clear
         host.view.backgroundColor = .clear
         host.safeAreaRegions = []
+        // Let the hosted SwiftUI content drive its own size, so the row and
+        // what it draws change together.
+        host.sizingOptions = [.intrinsicContentSize]
 
         // The flag has to be on before the canvas is looked up: it is what
         // makes the field build the secure canvas in the first place.
         field.isSecureTextEntry = true
         field.isUserInteractionEnabled = false
 
-        let canvas = field.subviews.first { String(describing: type(of: $0)).contains("Canvas") }
+        let canvas = Self.filming ? nil : field.subviews.first { String(describing: type(of: $0)).contains("Canvas") }
         let container: UIView
         if let canvas {
             canvas.subviews.forEach { $0.removeFromSuperview() }
@@ -66,6 +71,17 @@ final class SecureCanvasHost<Content: View>: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    /// `--promo-visible-secrets` (debug builds only) draws the content
+    /// normally, so a screen recording made for marketing can show what the
+    /// person holding the phone sees. Nothing else about the reveal changes.
+    private static var filming: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--promo-visible-secrets")
+        #else
+        false
+        #endif
+    }
 
     /// Whether the content is actually on the secure canvas, for tests.
     var isProtected: Bool {

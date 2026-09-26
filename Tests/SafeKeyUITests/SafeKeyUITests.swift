@@ -45,14 +45,14 @@ final class SafeKeyUITests: XCTestCase {
         XCTAssertTrue(window.waitForExistence(timeout: 10))
 
         // Sidebar tiles + demo entries present.
-        XCTAssertTrue(app.staticTexts["Main ETH Wallet"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Seed Phrases"].exists)
         XCTAssertTrue(app.staticTexts["Private Keys"].exists)
 
         // Select an entry → detail shows masked secret, not the words.
-        app.staticTexts["Main ETH Wallet"].click()
+        app.staticTexts["Main Wallet"].click()
         XCTAssertTrue(app.staticTexts["Seed Phrase"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["abandon"].exists, "secret must be masked by default")
+        XCTAssertFalse(app.staticTexts["bridge"].exists, "secret must be masked by default")
 
         sleep(2) // let the deterministic frame + glass settle
         snap(app, "main-ui")
@@ -70,7 +70,7 @@ final class SafeKeyUITests: XCTestCase {
         let app = demoApp()
         app.launch()
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Main ETH Wallet"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: 10))
 
         app.buttons["Add Wallet"].click()
         XCTAssertTrue(app.staticTexts["New Wallet"].waitForExistence(timeout: 5))
@@ -83,7 +83,7 @@ final class SafeKeyUITests: XCTestCase {
         let app = demoApp()
         app.launch()
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Main ETH Wallet"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: 10))
 
         app.typeKey(",", modifierFlags: .command)
         sleep(2)
@@ -116,7 +116,7 @@ final class SafeKeyUITests: XCTestCase {
         field.click()
         field.typeText("demo-password-123\r")
 
-        XCTAssertTrue(app.staticTexts["Main ETH Wallet"].waitForExistence(timeout: 15), "vault should unlock into main UI")
+        XCTAssertTrue(app.staticTexts["Main Wallet"].waitForExistence(timeout: 15), "vault should unlock into main UI")
         app.terminate()
     }
 

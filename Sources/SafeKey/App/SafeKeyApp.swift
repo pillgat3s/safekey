@@ -12,6 +12,9 @@ struct SafeKeyApp: App {
                 .environment(model)
                 .task {
                     _ = DebugSupport.renderUnlockSheetIfNeeded(model: model)
+                    #if DEBUG
+                    PromoDirector.runIfRequested(model: model)
+                    #endif
                 }
         }
         .commands {

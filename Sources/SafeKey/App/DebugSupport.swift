@@ -294,60 +294,13 @@ enum DebugSupport {
         return VaultStore(directory: dir)
     }
 
+    /// The same invented wallets the iPhone's `--promo` vault shows, so the two
+    /// apps agree on screen when they are filmed side by side.
     static func demoPayload() -> VaultPayload {
-        let now = Date.vaultNow()
-        let day: TimeInterval = 86_400
-        func at(_ daysAgo: Double) -> Date { Date(timeIntervalSince1970: (now.timeIntervalSince1970 - daysAgo * day).rounded(.down)) }
-        return VaultPayload(entries: [
-            WalletEntry(
-                name: "Main ETH Wallet",
-                chain: .evm,
-                kind: .seedPhrase(wordCount: 12),
-                secret: "abandon ability able about above absent absorb abstract absurd abuse access accident",
-                publicAddress: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
-                notes: "MetaMask hot wallet, small balance only.",
-                tags: ["hot", "defi"],
-                favorite: true,
-                createdAt: at(300), modifiedAt: at(0)
-            ),
-            WalletEntry(
-                name: "Trading Bot",
-                chain: .evm,
-                kind: .privateKey,
-                secret: "0x4c0883a69102937d6231471b5dbb6204fe51296170827936ea5cce4b76994b0f",
-                publicAddress: "0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF",
-                tags: ["bot"],
-                createdAt: at(90), modifiedAt: at(1)
-            ),
-            WalletEntry(
-                name: "BTC Stack",
-                chain: .bitcoin,
-                kind: .seedPhrase(wordCount: 24),
-                secret: "legal winner thank year wave sausage worth useful legal winner thank yellow legal winner thank year wave sausage worth useful legal winner thank title",
-                publicAddress: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-                notes: "Sparrow wallet.",
-                tags: ["cold-ish"],
-                favorite: true,
-                createdAt: at(400), modifiedAt: at(5)
-            ),
-            WalletEntry(
-                name: "SOL Staking",
-                chain: .solana,
-                kind: .seedPhrase(wordCount: 12),
-                secret: "pill frown baby wolf slush march sibling gauge shy quantum spread barrel",
-                publicAddress: "7f9d3VbnLQGnUwmknE7ZBdHmnMy4NHZy5vGdY6ZLoWpm",
-                tags: ["staking"],
-                createdAt: at(200), modifiedAt: at(12)
-            ),
-            WalletEntry(
-                name: "Monero Spend",
-                chain: .known(.monero),
-                kind: .privateKey,
-                secret: "8f3c1d4b2a9e6f5d0c7b4a3928170605f4e3d2c1b0a998877665544332211ff0",
-                notes: "View key in the notes of the cold copy.",
-                tags: ["privacy"],
-                createdAt: at(50), modifiedAt: at(45)
-            ),
-        ])
+        #if DEBUG
+        PromoContent.payload()
+        #else
+        VaultPayload()
+        #endif
     }
 }
