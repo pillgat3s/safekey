@@ -2,16 +2,22 @@ import SwiftUI
 import AppKit
 import SafeKeyCore
 
-/// First-run flow: welcome card → set master password → vault created.
+/// First-run flow: welcome card → what SafeKey is for → set master password
+/// (or restore a backup) → vault created. Both ways forward from the welcome
+/// pass through the notice, so a vault never exists without it having been
+/// acknowledged.
 struct OnboardingView: View {
     @Environment(AppModel.self) private var model
-    @State private var step: Step = .welcome
+    @State private var step: Step = DebugSupport.startsAtScopeNotice ? .scope(then: .setPassword) : .welcome
     @State private var restoreError: String?
 
-    enum Step {
+    enum Step: Equatable {
         case welcome
+        case scope(then: Next)
         case setPassword
     }
+
+    enum Next { case setPassword, restore }
 
     var body: some View {
         ZStack {
@@ -20,17 +26,20 @@ struct OnboardingView: View {
             case .welcome:
                 welcomeCard
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            case .scope(let next):
+                ScopeNoticeCard {
+                    switch next {
+                    case .setPassword: step = .setPassword
+                    case .restore: restoreFromBackup()
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
             case .setPassword:
                 SetPasswordStepView()
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
-        .animation(.smooth(duration: 0.3), value: stepIsWelcome)
-    }
-
-    private var stepIsWelcome: Bool {
-        if case .welcome = step { return true }
-        return false
+        .animation(.smooth(duration: 0.3), value: step)
     }
 
     private var welcomeCard: some View {
@@ -48,13 +57,13 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)
                 Button("Set Up Your Vault") {
-                    step = .setPassword
+                    step = .scope(then: .setPassword)
                 }
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
                 .padding(.top, 6)
 
-                Button("Restore from a Backup…") { restoreFromBackup() }
+                Button("Restore from a Backup…") { step = .scope(then: .restore) }
                     .buttonStyle(.plain)
                     .font(.callout)
                     .foregroundStyle(.secondary)

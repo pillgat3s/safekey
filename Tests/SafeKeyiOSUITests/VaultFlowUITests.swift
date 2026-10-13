@@ -19,6 +19,9 @@ final class VaultFlowUITests: XCTestCase {
     private func dismissWelcome() {
         let cont = app.buttons["welcome.continue"]
         if cont.waitForExistence(timeout: 15) { cont.tap() }
+        // Then the notice of what SafeKey is for, which must be acknowledged.
+        let acknowledge = app.buttons["scope.acknowledge"]
+        if acknowledge.waitForExistence(timeout: 10) { acknowledge.tap() }
     }
 
     /// Backgrounds the app and comes back, which is how the vault locks now
@@ -130,6 +133,26 @@ final class VaultFlowUITests: XCTestCase {
     private var lockPasswordField: XCUIElement { app.secureTextFields["lock.password"] }
 
     // MARK: - Tests
+
+    /// Between the welcome and the password there is a notice of what SafeKey
+    /// is for, and nothing goes forward — not creating a vault, not restoring
+    /// one — until it has been acknowledged.
+    func testScopeNoticeMustBeAcknowledged() {
+        launch()
+        let cont = app.buttons["welcome.continue"]
+        XCTAssertTrue(cont.waitForExistence(timeout: timeout))
+        cont.tap()
+
+        let acknowledge = app.buttons["scope.acknowledge"]
+        XCTAssertTrue(acknowledge.waitForExistence(timeout: timeout), "the scope notice did not appear")
+        XCTAssertTrue(app.staticTexts["Made for Burner Wallets"].exists)
+        XCTAssertFalse(app.secureTextFields["onboarding.password"].exists, "the password step must wait for the acknowledgement")
+        XCTAssertFalse(app.buttons["Restore from a Backup…"].exists, "restoring must wait for the acknowledgement too")
+
+        acknowledge.tap()
+        XCTAssertTrue(app.secureTextFields["onboarding.password"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons["Restore from a Backup…"].exists)
+    }
 
     func testCreateVaultLandsOnEmptyList() {
         launch()

@@ -230,6 +230,43 @@ enum DebugSupport {
         #endif
     }
 
+    /// `SAFEKEY_SCOPE_SHEET=/x.png`, with `SAFEKEY_SCRATCH_STORE=1`, opens
+    /// first-run onboarding straight at the scope notice, captures the window
+    /// a moment later and exits. A capture of the live window rather than an
+    /// offscreen render, because the glass card only draws inside one.
+    static var startsAtScopeNotice: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["SAFEKEY_SCOPE_SHEET"] != nil
+        #else
+        false
+        #endif
+    }
+
+    @MainActor
+    static func captureScopeSheetIfNeeded() {
+        #if DEBUG
+        guard let path = ProcessInfo.processInfo.environment["SAFEKEY_SCOPE_SHEET"] else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard let window = NSApp.windows.first(where: { $0.isVisible }) else {
+                FileHandle.standardError.write(Data("[scope] no visible window among \(NSApp.windows.count)\n".utf8)); exit(1)
+            }
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .seconds(1))
+            guard let image = WindowCapture.image(of: CGWindowID(window.windowNumber)) else {
+                FileHandle.standardError.write(Data("[scope] capture returned nil; sharingType=\(window.sharingType.rawValue)\n".utf8)); exit(1)
+            }
+            guard let destination = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.png" as CFString, 1, nil)
+            else { FileHandle.standardError.write(Data("[scope] cannot write\n".utf8)); exit(1) }
+            CGImageDestinationAddImage(destination, image, nil)
+            CGImageDestinationFinalize(destination)
+            FileHandle.standardError.write(Data("[scope] wrote \(path)\n".utf8))
+            exit(0)
+        }
+        #endif
+    }
+
     /// `SAFEKEY_TOOLBAR_DUMP=1` shrinks the window to its minimum and prints
     /// the frame of every titlebar control, so alignment can be measured
     /// instead of eyeballed.

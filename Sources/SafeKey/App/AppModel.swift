@@ -30,6 +30,21 @@ final class AppModel {
         self.sync = SyncCoordinator(store: store)
     }
 
+    /// The model the app should use. `SAFEKEY_SCRATCH_STORE=1` (debug builds
+    /// only) gives a vault in a temporary directory under its own Keychain
+    /// service — a first launch, with the real vault untouched — the way
+    /// `--uitest` does on the iPhone.
+    static func forCurrentLaunch() -> AppModel {
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["SAFEKEY_SCRATCH_STORE"] == "1" else { return AppModel() }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SafeKeyScratch-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        return AppModel(store: VaultStore(directory: directory), keychain: KeychainService(service: "com.andri.safekey.scratch"))
+        #else
+        return AppModel()
+        #endif
+    }
+
     private var activeStore: VaultStore { demoState?.0 ?? store }
 
     /// Trusted policy/counter store. Never reads the on-disk header.

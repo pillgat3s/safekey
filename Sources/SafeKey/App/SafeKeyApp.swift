@@ -4,7 +4,7 @@ import SafeKeyCore
 @main
 struct SafeKeyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var model = AppModel.forCurrentLaunch()
 
     var body: some Scene {
         WindowGroup {

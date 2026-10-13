@@ -22,6 +22,9 @@ final class LayoutUITests: XCTestCase {
     private func dismissWelcome() {
         let cont = app.buttons["welcome.continue"]
         if cont.waitForExistence(timeout: 15) { cont.tap() }
+        // Then the notice of what SafeKey is for, which must be acknowledged.
+        let acknowledge = app.buttons["scope.acknowledge"]
+        if acknowledge.waitForExistence(timeout: 10) { acknowledge.tap() }
     }
 
     /// A freshly created vault now offers biometric unlock. Tests that are not

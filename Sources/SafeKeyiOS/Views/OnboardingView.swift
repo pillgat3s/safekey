@@ -4,7 +4,7 @@ import SafeKeyCore
 
 struct OnboardingView: View {
     @Environment(AppModel.self) private var model
-    @State private var hasSeenWelcome = false
+    @State private var page: Page = .welcome
     @State private var password = ""
     @State private var confirmation = ""
     @State private var isCreating = false
@@ -17,12 +17,20 @@ struct OnboardingView: View {
         strength != .tooShort && password == confirmation && !isCreating
     }
 
+    /// Welcome, then what the app is for, then the password. The notice is
+    /// acknowledged before a vault can be created or a backup restored.
+    enum Page { case welcome, scope, setPassword }
+
     var body: some View {
-        if hasSeenWelcome {
-            setPassword
-        } else {
-            WelcomeView { withAnimation(.smooth(duration: 0.3)) { hasSeenWelcome = true } }
+        switch page {
+        case .welcome:
+            WelcomeView { withAnimation(.smooth(duration: 0.3)) { page = .scope } }
                 .transition(.opacity)
+        case .scope:
+            ScopeNoticeView { withAnimation(.smooth(duration: 0.3)) { page = .setPassword } }
+                .transition(.opacity)
+        case .setPassword:
+            setPassword
         }
     }
 

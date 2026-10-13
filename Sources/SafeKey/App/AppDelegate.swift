@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard !DebugSupport.runBiometricDiagnosticIfNeeded() else { return }
             DisguiseManager.shared.applyRuntimeDisguise()
             DebugSupport.installWindowFramingIfNeeded()
+            DebugSupport.captureScopeSheetIfNeeded()
             DebugSupport.dumpToolbarIfNeeded()
         }
     }
