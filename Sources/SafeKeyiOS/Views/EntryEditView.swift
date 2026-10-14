@@ -24,6 +24,9 @@ struct EntryEditView: View {
     @State private var derivationPassphrase = ""
     @State private var baseline: Snapshot?
     @State private var confirmingDiscard = false
+    /// Device-local, like the other view preferences: whether the reminder of
+    /// what SafeKey is for still shows when a wallet is added.
+    @AppStorage(ScopeReminder.dismissedKey) private var scopeReminderDismissed = false
 
     /// Everything the Save button would write, for telling "opened and looked"
     /// apart from "typed half a seed phrase".
@@ -67,8 +70,14 @@ struct EntryEditView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if existing == nil, !scopeReminderDismissed {
+                    Section {
+                        ScopeReminderRow { scopeReminderDismissed = true }
+                    }
+                }
+
                 Section {
-                    TextField("Name", text: $name, prompt: Text("e.g. Main Wallet"))
+                    TextField("Name", text: $name, prompt: Text("e.g. Sniper Bot 3"))
                         .accessibilityIdentifier("entry.name")
                     Button {
                         showingChainPicker = true

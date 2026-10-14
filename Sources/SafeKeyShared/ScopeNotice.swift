@@ -31,3 +31,8 @@ enum ScopeNotice {
     /// The one-line version, for the reminder when a wallet is added.
     static let reminder = "SafeKey is for burner wallets and small balances. Keep larger amounts in dedicated, secure storage."
 }
+
+enum ScopeReminder {
+    /// UserDefaults key for "Don't Show Again" on the add-wallet reminder.
+    static let dismissedKey = "scopeReminderDismissed"
+}

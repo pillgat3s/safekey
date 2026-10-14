@@ -85,9 +85,9 @@ enum PromoDirector {
         await wait(1.2)
         still(window, "mac-main", in: directory)
 
-        send(.open("Main Wallet")); mark("open-main", in: directory)
+        send(.open("Daily Burner")); mark("open-main", in: directory)
         await wait(2.2)
-        send(.open("DeFi Vault")); mark("open-defi", in: directory)
+        send(.open("Airdrop Farm A")); mark("open-defi", in: directory)
         await wait(1.6)
         still(window, "mac-detail-key", in: directory)
         send(.reveal); mark("reveal-key", in: directory)
@@ -99,7 +99,7 @@ enum PromoDirector {
 
         send(.select(.seedPhrases)); mark("seed-list", in: directory)
         await wait(1.4)
-        send(.open("Cold Storage")); mark("open-cold", in: directory)
+        send(.open("Test Wallet")); mark("open-cold", in: directory)
         await wait(1.4)
         send(.reveal); mark("reveal-seed", in: directory)
         await wait(1.0)

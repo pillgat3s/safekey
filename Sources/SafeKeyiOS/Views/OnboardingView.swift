@@ -45,7 +45,7 @@ struct OnboardingView: View {
                 Text("SafeKey")
                     .font(.largeTitle.bold())
 
-                Text("An encrypted vault for your wallet recovery phrases and private keys. Everything stays on this device unless you later turn on iCloud sync.")
+                Text("An encrypted vault for the recovery phrases and private keys of your burner wallets. Everything stays on this device unless you later turn on iCloud sync.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

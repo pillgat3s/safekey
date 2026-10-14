@@ -220,7 +220,7 @@ final class SyncCoordinatorTests: XCTestCase {
     /// Deleting a group removes the folder from iCloud without touching the
     /// wallets that were in it.
     func testDeletingAGroupRemovesOnlyTheGroup() async throws {
-        let rig = try makeRig(entries: [entry("Ledger")])
+        let rig = try makeRig(entries: [entry("Burner")])
         let group = rig.session.addGroup(name: "Savings", chain: .evm, colorHex: nil)
         rig.session.move(entryID: rig.session.entries[0].id, toGroup: group.id)
         await rig.coordinator.syncIfEnabled(session: rig.session)

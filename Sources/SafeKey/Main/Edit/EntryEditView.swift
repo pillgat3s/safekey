@@ -20,6 +20,7 @@ struct EntryEditView: View {
     @State private var showingDerivation = false
     @State private var baseline: Snapshot?
     @State private var confirmingDiscard = false
+    @AppStorage(ScopeReminder.dismissedKey) private var scopeReminderDismissed = false
 
     /// Everything Save would write, so "opened and looked" can be told apart
     /// from "typed half a seed phrase".
@@ -118,8 +119,27 @@ struct EntryEditView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if existing == nil, !scopeReminderDismissed {
+                    Section {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "info.circle.fill")
+                                .foregroundStyle(.tint)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(ScopeNotice.reminder)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button("Don't Show Again") { scopeReminderDismissed = true }
+                                    .buttonStyle(.link)
+                                    .font(.callout)
+                            }
+                        }
+                    }
+                }
+
                 Section {
-                    TextField("Name", text: $name, prompt: Text("e.g. Main EVM Wallet"))
+                    TextField("Name", text: $name, prompt: Text("e.g. Sniper Bot 3"))
                     LabeledContent("Chain") {
                         Button {
                             showingChainPicker = true

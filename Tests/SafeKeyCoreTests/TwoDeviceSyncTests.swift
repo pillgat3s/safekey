@@ -220,7 +220,7 @@ final class TwoDeviceSyncTests: XCTestCase {
     func testDeletedGroupUngroupsItsWalletsOnTheOtherDevice() async throws {
         let server = CloudServer()
         let group = WalletGroup(name: "Savings", chain: .evm)
-        var member = entry("Ledger")
+        var member = entry("Burner")
         member.groupID = group.id
 
         var mac = Device(server: server, dek: dek, payload: VaultPayload(entries: [member], groups: [group]))
@@ -251,7 +251,7 @@ final class TwoDeviceSyncTests: XCTestCase {
     /// record — no other device will ever correct it.
     func testAnArrivingWalletNeverKeepsAGroupThisDeviceDoesNotHave() async throws {
         let server = CloudServer()
-        var phone = Device(server: server, dek: dek, payload: VaultPayload(entries: [entry("Ledger")]))
+        var phone = Device(server: server, dek: dek, payload: VaultPayload(entries: [entry("Burner")]))
         try await phone.syncNow()
 
         // The other device still holds a group this one deleted long ago, and
@@ -438,7 +438,7 @@ final class TwoDeviceSyncTests: XCTestCase {
         let (_, vault) = try Vault.create(password: password, iterations: 1_000)
 
         let group = WalletGroup(name: "Savings", chain: .evm)
-        var member = entry("Ledger", secret: "seed words here")
+        var member = entry("Burner", secret: "seed words here")
         member.groupID = group.id
         var mac = Device(server: server, dek: vault.dek, payload: VaultPayload(entries: [member], groups: [group]))
         try await mac.sync.publishVault(header: vault.header)
@@ -450,7 +450,7 @@ final class TwoDeviceSyncTests: XCTestCase {
         )
 
         XCTAssertEqual(joined.unlocked.header.vaultID, vault.header.vaultID)
-        XCTAssertEqual(joined.unlocked.payload.entries.map(\.name), ["Ledger"])
+        XCTAssertEqual(joined.unlocked.payload.entries.map(\.name), ["Burner"])
         XCTAssertEqual(joined.unlocked.payload.entries.first?.secret, "seed words here")
         XCTAssertEqual(joined.unlocked.payload.groups.map(\.name), ["Savings"])
         XCTAssertEqual(joined.unlocked.payload.entries.first?.groupID, group.id)
@@ -470,7 +470,7 @@ final class TwoDeviceSyncTests: XCTestCase {
         let server = CloudServer()
         let password = "correct-horse-battery-3"
         let (_, vault) = try Vault.create(password: password, iterations: 1_000)
-        var mac = Device(server: server, dek: vault.dek, payload: VaultPayload(entries: [entry("Ledger")]))
+        var mac = Device(server: server, dek: vault.dek, payload: VaultPayload(entries: [entry("Burner")]))
         try await mac.sync.publishVault(header: vault.header)
         try await mac.syncNow()
 

@@ -16,8 +16,8 @@ struct WelcomeView: View {
     private let features: [Feature] = [
         Feature(
             icon: "key.fill",
-            title: "Never Lose a Seed Phrase",
-            detail: "Every recovery phrase and private key in one place, ready the moment you need it."
+            title: "Your Burners, in One Place",
+            detail: "The throwaway wallets you'd otherwise keep in Notes or screenshots — encrypted, and ready when you need them."
         ),
         Feature(
             icon: "lock.fill",

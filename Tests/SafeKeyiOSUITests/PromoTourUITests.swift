@@ -59,7 +59,7 @@ final class PromoTourUITests: XCTestCase {
         mark("list")
         hold(2.8)
 
-        app.staticTexts["DeFi Vault"].tap()
+        app.staticTexts["Airdrop Farm A"].tap()
         let secretRow = app.buttons["detail.secretRow"]
         XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
         mark("detail-key")
@@ -73,7 +73,7 @@ final class PromoTourUITests: XCTestCase {
         back()
         hold(1.4)
 
-        app.staticTexts["Main Wallet"].tap()
+        app.staticTexts["Daily Burner"].tap()
         XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
         mark("detail-seed")
         hold(2.0)
@@ -110,7 +110,7 @@ final class PromoTourUITests: XCTestCase {
         if search.waitForExistence(timeout: 5) {
             search.tap()
             _ = app.keyboards.firstMatch.waitForExistence(timeout: 3)
-            search.typeText("cold")
+            search.typeText("sniper")
             mark("search")
             hold(3.5)
         }
@@ -137,7 +137,7 @@ final class PromoTourUITests: XCTestCase {
         let all = app.buttons["tile.All"]
         try XCTSkipUnless(all.waitForExistence(timeout: timeout), "tile home not present — iPad layout")
         all.tap()
-        app.staticTexts["DeFi Vault"].tap()
+        app.staticTexts["Airdrop Farm A"].tap()
         let secretRow = app.buttons["detail.secretRow"]
         XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
         secretRow.tap()
@@ -157,7 +157,7 @@ final class PromoTourUITests: XCTestCase {
         hold(1.5)
         mark("ipad-home")
         hold(2.5)
-        app.staticTexts["DeFi Vault"].firstMatch.tap()
+        app.staticTexts["Airdrop Farm A"].firstMatch.tap()
         let secretRow = app.buttons["detail.secretRow"]
         XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
         mark("ipad-detail")

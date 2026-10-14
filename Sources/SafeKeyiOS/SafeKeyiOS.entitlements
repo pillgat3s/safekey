@@ -4,8 +4,6 @@
 <dict>
 	<key>application-identifier</key>
 	<string>RR9A8973M8.com.andri.safekey.ios</string>
-	<key>aps-environment</key>
-	<string>development</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>iCloud.com.pill.safekey</string>

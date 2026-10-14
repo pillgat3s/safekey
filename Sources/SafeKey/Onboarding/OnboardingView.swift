@@ -51,7 +51,7 @@ struct OnboardingView: View {
                     .padding(.top, 8)
                 Text("SafeKey")
                     .font(.largeTitle.bold())
-                Text("A local, fully encrypted vault for your wallet seed phrases and private keys. Nothing leaves this Mac unless you later turn on iCloud sync.")
+                Text("A local, fully encrypted vault for the seed phrases and private keys of your burner wallets. Nothing leaves this Mac unless you later turn on iCloud sync.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

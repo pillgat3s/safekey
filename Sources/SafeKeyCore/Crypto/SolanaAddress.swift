@@ -109,7 +109,7 @@ public enum SolanaAddress {
             let accountPath = "m/44'/501'/\(account)'"
             results.append(Candidate(
                 path: accountPath,
-                label: account == 0 ? "Solana CLI, Ledger (account 1)" : "Account \(account + 1), short path",
+                label: account == 0 ? "Solana CLI (account 1)" : "Account \(account + 1), short path",
                 address: Base58.encode(try publicKey(fromSeed: derive(seed: seed, path: [44, 501, account]))),
                 isExact: false
             ))

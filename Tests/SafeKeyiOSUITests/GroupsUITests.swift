@@ -100,12 +100,12 @@ final class GroupsUITests: XCTestCase {
         let nameField = app.textFields["entry.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: timeout))
         nameField.tap()
-        nameField.typeText(name)
+        nameField.typeText(name + "\n")   // Return puts the keyboard away before the editor is reached
 
         app.buttons["Private Key"].tap()
         let editor = app.textViews["entry.secret"]
         XCTAssertTrue(editor.waitForExistence(timeout: timeout))
-        editor.tap()
+        focusEditor(editor)
         editor.typeText("0xabc123")
 
         app.buttons["Save"].tap()
@@ -126,6 +126,19 @@ final class GroupsUITests: XCTestCase {
 
     private func backToHome() {
         app.navigationBars.buttons.firstMatch.tap()
+    }
+
+    /// Taps the secret editor until it has keyboard focus. With the keyboard
+    /// already up from the name field, the editor starts below it, and a tap
+    /// that lands while the form is still scrolling it into view focuses
+    /// nothing.
+    private func focusEditor(_ editor: XCUIElement) {
+        for _ in 0..<4 {
+            editor.tap()
+            _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
+            if (editor.value(forKey: "hasKeyboardFocus") as? Bool) == true { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
     }
 
     func testCreatedGroupIsListedOnHome() throws {

@@ -85,7 +85,7 @@ final class ScreenshotTourUITests: XCTestCase {
         // 24 words and a long name: the grid and the title have to cope with
         // the largest thing a user can realistically store.
         addEntry(
-            name: "Ledger Nano X — Long Term Cold Storage",
+            name: "Presale Burner — One-Time Use",
             secret: "abandon ability able about above absent absorb abstract absurd abuse access accident "
                 + "account accuse achieve acid acoustic acquire across act action actor actress actual",
             seedPhrase: true
@@ -107,7 +107,7 @@ final class ScreenshotTourUITests: XCTestCase {
         capture("04b-wallet-list")
 
         // 4. Detail, masked then revealed
-        app.staticTexts["Ledger Nano X — Long Term Cold Storage"].tap()
+        app.staticTexts["Presale Burner — One-Time Use"].tap()
         let secretRow = app.buttons["detail.secretRow"]
         XCTAssertTrue(secretRow.waitForExistence(timeout: timeout))
         capture("05-detail-masked")
@@ -155,6 +155,19 @@ final class ScreenshotTourUITests: XCTestCase {
         capture("09-lock-screen")
     }
 
+    /// Taps the secret editor until it has keyboard focus. With the keyboard
+    /// already up from the name field, the editor starts below it, and a tap
+    /// that lands while the form is still scrolling it into view focuses
+    /// nothing.
+    private func focusEditor(_ editor: XCUIElement) {
+        for _ in 0..<4 {
+            editor.tap()
+            _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
+            if (editor.value(forKey: "hasKeyboardFocus") as? Bool) == true { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+    }
+
     private func addEntry(name: String, secret: String, seedPhrase: Bool = false) {
         app.buttons["Add Wallet"].tap()
         XCTAssertTrue(app.navigationBars["New Wallet"].waitForExistence(timeout: timeout))
@@ -162,13 +175,13 @@ final class ScreenshotTourUITests: XCTestCase {
         let nameField = app.textFields["entry.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: timeout))
         nameField.tap()
-        nameField.typeText(name)
+        nameField.typeText(name + "\n")   // Return puts the keyboard away before the editor is reached
 
         app.buttons[seedPhrase ? "Seed Phrase" : "Private Key"].tap()
 
         let editor = app.textViews["entry.secret"]
         XCTAssertTrue(editor.waitForExistence(timeout: timeout))
-        editor.tap()
+        focusEditor(editor)
         editor.typeText(secret)
 
         if seedPhrase { capture("04a-new-wallet-sheet") }

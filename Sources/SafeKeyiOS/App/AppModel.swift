@@ -96,6 +96,7 @@ final class AppModel {
         if arguments.contains("--uitest-reset") {
             try? FileManager.default.removeItem(at: directory)
             try? keychain.deleteAll()
+            UserDefaults.standard.removeObject(forKey: ScopeReminder.dismissedKey)
         }
         return AppModel(store: VaultStore(directory: directory), keychain: keychain)
         #else

@@ -79,20 +79,32 @@ final class VaultFlowUITests: XCTestCase {
     }
 
     /// Fills the add-wallet sheet and saves.
+    /// Taps the secret editor until it has keyboard focus. With the keyboard
+    /// already up from the name field, the editor starts below it, and a tap
+    /// that lands while the form is still scrolling it into view focuses
+    /// nothing.
+    private func focusEditor(_ editor: XCUIElement) {
+        for _ in 0..<4 {
+            editor.tap()
+            _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
+            if (editor.value(forKey: "hasKeyboardFocus") as? Bool) == true { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+    }
+
     private func addEntry(name: String, secret: String, seedPhrase: Bool = false) {
         app.buttons["Add Wallet"].tap()
         XCTAssertTrue(app.navigationBars["New Wallet"].waitForExistence(timeout: timeout))
 
         let nameField = app.textFields["entry.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: timeout))
-        type(name, into: nameField)
+        type(name + "\n", into: nameField)   // Return puts the keyboard away before the editor is reached
 
         app.buttons[seedPhrase ? "Seed Phrase" : "Private Key"].tap()
 
         let editor = app.textViews["entry.secret"]
         XCTAssertTrue(editor.waitForExistence(timeout: timeout))
-        editor.tap()
-        _ = app.keyboards.firstMatch.waitForExistence(timeout: 2)
+        focusEditor(editor)
         editor.typeText(secret)
 
         app.buttons["Save"].tap()
@@ -152,6 +164,34 @@ final class VaultFlowUITests: XCTestCase {
         acknowledge.tap()
         XCTAssertTrue(app.secureTextFields["onboarding.password"].waitForExistence(timeout: timeout))
         XCTAssertTrue(app.buttons["Restore from a Backup…"].exists)
+    }
+
+    /// Adding a wallet carries a short reminder of what SafeKey is for, until
+    /// "Don't Show Again" — which sticks across launches.
+    func testAddWalletReminderShowsUntilDismissed() {
+        launch()
+        createVault()
+
+        app.buttons["Add Wallet"].tap()
+        let reminder = app.staticTexts["entry.scopeReminder"]
+        XCTAssertTrue(reminder.waitForExistence(timeout: timeout), "the reminder should show when adding a wallet")
+        app.buttons["entry.scopeReminder.dismiss"].tap()
+        XCTAssertFalse(reminder.waitForExistence(timeout: 2), "the reminder should leave at once")
+        app.buttons["Cancel"].firstMatch.tap()
+
+        app.buttons["Add Wallet"].tap()
+        XCTAssertTrue(app.textFields["entry.name"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(reminder.exists, "once dismissed, the reminder stays away")
+        app.buttons["Cancel"].firstMatch.tap()
+
+        // Still away after a relaunch without a reset.
+        app.terminate()
+        launch(reset: false)
+        type(masterPassword + "\n", into: lockPasswordField)
+        XCTAssertTrue(app.buttons["Add Wallet"].waitForExistence(timeout: timeout))
+        app.buttons["Add Wallet"].tap()
+        XCTAssertTrue(app.textFields["entry.name"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(reminder.exists, "the dismissal must survive a relaunch")
     }
 
     func testCreateVaultLandsOnEmptyList() {
