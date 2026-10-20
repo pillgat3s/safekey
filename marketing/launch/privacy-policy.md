@@ -1,12 +1,13 @@
 # SafeKey Privacy Policy
 
-**Effective:** [date of release]
+**Effective:** 20 October 2026
 **Applies to:** SafeKey for iPhone, iPad and Mac
-**Developer:** Thomann Web Solutions, Switzerland — [contact email]
+**Developer:** Thomann Web Solutions, Switzerland — info@tws.sh
 
 SafeKey is built so that we never see your data. This policy describes
-what the app stores, where, and the two optional features that involve
-Apple's iCloud. It is written from the code, not from a template.
+what the app stores on your device, where that data lives, and the two
+optional features that use your own iCloud. It is written from the code,
+not from a template.
 
 ## 1. We collect nothing
 
@@ -92,5 +93,5 @@ update that introduces the change, with the effective date above updated.
 
 ## 8. Contact
 
-[contact email] — Thomann Web Solutions, [postal address if required by
-the App Store or Swiss law].
+info@tws.sh — Thomann Web Solutions, Switzerland. Published at
+https://safekey.tws.sh/privacy.
