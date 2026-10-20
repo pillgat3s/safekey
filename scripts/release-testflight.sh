@@ -47,7 +47,7 @@ die() { printf '\n\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -n "$VERSION" ] || { sed -n '2,12p' "$0"; exit 1; }
 case "$VERSION" in *[!0-9.]*|"") die "version must look like 1.2.3";; esac
-[ -n "$BUILD" ] || BUILD="$(git -C "$ROOT" rev-list --count HEAD)"
+[ -n "$BUILD" ] || BUILD="$(/usr/bin/git -C "$ROOT" rev-list --count HEAD)"
 case "$BUILD" in *[!0-9]*|"") die "build number must be an integer";; esac
 
 for tool in xcodegen xcodebuild; do

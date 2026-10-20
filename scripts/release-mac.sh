@@ -27,6 +27,10 @@
 #
 set -euo pipefail
 
+# gh shells out to whichever `git` is first on PATH; put Apple's first so a
+# stale third-party git in /usr/local/bin cannot break the publish step.
+export PATH="/usr/bin:$PATH"
+
 MODE="${1:-}"
 VERSION="${2:-}"
 APP_INPUT="${3:-}"
