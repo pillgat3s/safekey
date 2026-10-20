@@ -189,6 +189,8 @@ Requires macOS 26 or later.
 
 A local, fully encrypted vault for wallet seed phrases and private keys, in the shape of Apple's Passwords app. AES-256-GCM over the vault, a master password run through PBKDF2 at a calibrated cost, optional Touch ID, an optional USB security key as a cryptographic second factor, optional self-destruct after repeated wrong passwords, and optional iCloud sync between your own Apple devices — off until you switch it on, and only ever moving ciphertext.
 
+SafeKey is for burner wallets and small balances. Keep larger amounts in dedicated, secure storage.
+
 Nothing phones home. There are no accounts and no servers of ours.
 EOF
   } > "$file"
