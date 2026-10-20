@@ -5,6 +5,9 @@
 #
 #   scripts/release-testflight.sh 1.0.0          build number = commit count
 #   scripts/release-testflight.sh 1.0.0 42       explicit build number
+#   scripts/release-testflight.sh upload         upload the last archive again
+#                                                (after creating the app record,
+#                                                or when the upload itself failed)
 #
 # Every upload needs a build number higher than the last one for that version.
 # The default is the number of commits on the current branch, which only ever
@@ -45,10 +48,17 @@ fi
 say() { printf '\n\033[1m%s\033[0m\n' "$*" >&2; }
 die() { printf '\n\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ -n "$VERSION" ] || { sed -n '2,12p' "$0"; exit 1; }
-case "$VERSION" in *[!0-9.]*|"") die "version must look like 1.2.3";; esac
-[ -n "$BUILD" ] || BUILD="$(/usr/bin/git -C "$ROOT" rev-list --count HEAD)"
-case "$BUILD" in *[!0-9]*|"") die "build number must be an integer";; esac
+[ -n "$VERSION" ] || { sed -n '2,15p' "$0"; exit 1; }
+if [ "$VERSION" = "upload" ]; then
+  [ -d "$ARCHIVE" ] || die "no archive to upload at $ARCHIVE"
+  app="$ARCHIVE/Products/Applications/$PRODUCT.app"
+  VERSION="$(plutil -extract CFBundleShortVersionString raw "$app/Info.plist")"
+  BUILD="$(plutil -extract CFBundleVersion raw "$app/Info.plist")"
+else
+  case "$VERSION" in *[!0-9.]*|"") die "version must look like 1.2.3";; esac
+  [ -n "$BUILD" ] || BUILD="$(/usr/bin/git -C "$ROOT" rev-list --count HEAD)"
+  case "$BUILD" in *[!0-9]*|"") die "build number must be an integer";; esac
+fi
 
 for tool in xcodegen xcodebuild; do
   command -v "$tool" >/dev/null 2>&1 || die "$tool is not installed"
@@ -56,6 +66,7 @@ done
 
 mkdir -p "$OUT"
 
+if [ "${1:-}" != "upload" ]; then
 say "Generating project"
 (cd "$ROOT" && xcodegen generate >/dev/null)
 
@@ -68,8 +79,9 @@ xcodebuild -project "$ROOT/SafeKey.xcodeproj" -scheme "$SCHEME" -configuration R
   || { grep -E "error:|ARCHIVE FAILED" "$OUT/archive.log" >&2 || true
        die "archive failed — full log: $OUT/archive.log"; }
 [ -d "$ARCHIVE" ] || die "archive failed — full log: $OUT/archive.log"
+fi
 
-say "Uploading to App Store Connect"
+say "Uploading $PRODUCT iOS $VERSION ($BUILD) to App Store Connect"
 rm -rf "$EXPORT"
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$ROOT/scripts/ExportOptions-AppStore.plist" \
