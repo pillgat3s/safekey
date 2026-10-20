@@ -51,7 +51,7 @@ die() { printf '\n\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 [ -n "$VERSION" ] || { sed -n '2,15p' "$0"; exit 1; }
 if [ "$VERSION" = "upload" ]; then
   [ -d "$ARCHIVE" ] || die "no archive to upload at $ARCHIVE"
-  app="$ARCHIVE/Products/Applications/$PRODUCT.app"
+  app="$(ls -d "$ARCHIVE"/Products/Applications/*.app | head -1)"
   VERSION="$(plutil -extract CFBundleShortVersionString raw "$app/Info.plist")"
   BUILD="$(plutil -extract CFBundleVersion raw "$app/Info.plist")"
 else
