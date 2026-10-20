@@ -2,7 +2,7 @@
 
 **Effective:** 20 October 2026
 **Applies to:** SafeKey for iPhone, iPad and Mac
-**Developer:** Thomann Web Solutions — info@tws.sh
+**Developer:** Thomann Web Solutions — help@tws.sh
 
 SafeKey is built so that we never see your data. This policy describes
 what the app stores on your device, where that data lives, and the two
@@ -94,5 +94,5 @@ date is updated at the same time.
 
 ## 8. Contact
 
-info@tws.sh — Thomann Web Solutions. Published at
+help@tws.sh — Thomann Web Solutions. Published at
 https://safekey.tws.sh/privacy.
