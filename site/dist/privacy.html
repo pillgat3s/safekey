@@ -32,12 +32,12 @@
     <p class="meta">
       <b>Effective:</b> 20 October 2026<br>
       <b>Applies to:</b> SafeKey for iPhone, iPad and Mac<br>
-      <b>Developer:</b> Thomann Web Solutions, Switzerland — <a href="mailto:info@tws.sh">info@tws.sh</a>
+      <b>Developer:</b> Thomann Web Solutions — <a href="mailto:info@tws.sh">info@tws.sh</a>
     </p>
     <p class="intro">SafeKey is built so that we never see your data. This policy describes what the app stores on your device, where that data lives, and the two optional features that use your own iCloud. It is written from the code, not from a template.</p>
 
     <h2>1. We collect nothing</h2>
-    <p>SafeKey has no account system, no server of ours, and no analytics, advertising or crash-reporting library. The app contains no third-party code. It makes no network connection of its own. We do not receive your wallet names, secrets, addresses, notes, tags, settings, usage data, device identifiers or IP address, because nothing in the app sends them.</p>
+    <p>SafeKey has no account system, no server of ours, and no analytics, advertising or crash-reporting library. The app contains no third-party code and makes no network connection of its own. We do not receive your wallet names, secrets, addresses, notes, tags, settings, usage data, device identifiers or IP address, because nothing in the app sends them.</p>
     <p>If you have agreed to share analytics with app developers in your Apple device settings, Apple may send us crash reports for SafeKey. Those reports contain technical details about the crash and no vault contents.</p>
 
     <h2>2. What the app stores on your device</h2>
@@ -45,7 +45,7 @@
     <ul>
       <li><strong>The vault:</strong> your wallets' names, seed phrases, private keys, public addresses, notes and tags, your groups, and the app's settings. All of this is encrypted with AES-256-GCM under a key derived from your master password. The file's unencrypted header holds only a vault identifier, the creation date, the parameters needed to derive the key from your password, the encrypted key itself, and your self-destruct and security-key settings.</li>
       <li><strong>Your master password is never stored</strong>, anywhere, in any form. We cannot reset or recover it. If you forget it, the vault cannot be opened.</li>
-      <li><strong>Face ID / Touch ID:</strong> if you turn biometric unlock on, a copy of the vault's encryption key is stored in the device Keychain protected by the Secure Enclave, released only for the biometrics enrolled at the time. The app never receives or stores your face or fingerprint; the system handles that.</li>
+      <li><strong>Face ID / Touch ID:</strong> if you turn biometric unlock on, a copy of the vault's encryption key is stored in the device Keychain, protected by the Secure Enclave and released only to the biometrics enrolled at the time. The app never receives or stores your face or fingerprint; the system handles that.</li>
       <li><strong>Bookkeeping:</strong> a record used by the self-destruct feature (how many wrong passwords have been entered), sync state if sync is on, and view preferences such as which sections are collapsed. None of it contains secrets.</li>
       <li><strong>Clipboard:</strong> when you copy a secret, it is placed on the device clipboard marked as concealed and local-only, and cleared after the interval you choose (30 seconds by default).</li>
     </ul>
@@ -54,7 +54,7 @@
     <h2>3. iCloud (optional, off by default)</h2>
     <p>Two features use your own iCloud account. Neither sends anything to us.</p>
     <ul>
-      <li><strong>Sync with iCloud</strong> keeps the vault in step across your devices through Apple's CloudKit, in the private database of your iCloud account. Only encrypted wallet data and the vault's unencrypted header (described above) are uploaded. Apple can see how many wallets you have and when they changed; Apple cannot read them, and the developer cannot access a user's private CloudKit database.</li>
+      <li><strong>Sync with iCloud</strong> keeps the vault in step across your devices through Apple's CloudKit, in the private database of your iCloud account. Only encrypted wallet data and the vault's unencrypted header (described above) are uploaded. Apple can see how many wallets you have and when they changed. Apple cannot read them, and we have no access to your private CloudKit database.</li>
       <li><strong>Backups:</strong> iCloud Backup of your iPhone includes the encrypted vault file unless you turn that off in SafeKey's settings. On the Mac, "Keep an encrypted copy in iCloud Drive" places the same encrypted file in your iCloud Drive. Backups you export yourself are the same encrypted file.</li>
     </ul>
     <p>Apple's handling of iCloud data is governed by <a href="https://www.apple.com/legal/privacy/" rel="noopener">Apple's privacy policy</a>.</p>
@@ -73,12 +73,12 @@
     <p>SafeKey is not directed at children under 13 and collects no data from anyone.</p>
 
     <h2>7. Changes</h2>
-    <p>If this policy changes, the new version will be published here and with the app update that introduces the change, with the effective date above updated.</p>
+    <p>If this policy changes, the new version is published here and ships with the app update that introduces the change. The effective date above is updated at the same time.</p>
 
     <h2>8. Contact</h2>
     <div class="contact-card">
       <a href="mailto:info@tws.sh">info@tws.sh</a>
-      <p>Thomann Web Solutions, Switzerland</p>
+      <p>Thomann Web Solutions</p>
     </div>
   </main>
 
@@ -86,7 +86,7 @@
     <div class="shell">
       <span>© 2026 Thomann Web Solutions</span>
       <nav aria-label="Footer"><a href="/privacy">Privacy</a><a href="/support">Support</a></nav>
-      <span class="by">Made in Switzerland by <a href="https://tws.sh/">tws.sh</a></span>
+      <span class="by">Made by <a href="https://tws.sh/">tws.sh</a></span>
     </div>
   </footer>
 </body>
