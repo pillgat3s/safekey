@@ -125,13 +125,17 @@ invented keys. Dark mode, 9:41, full signal.
 > default; it uses the app's CloudKit private database and syncs only
 > ciphertext.
 >
-> Under guideline 3.1.5 (iii), the app does not facilitate storage of
-> virtual currency itself; it stores text the user already has. The
-> developer account is being converted to an organization regardless.
+> Guideline 3.1.5 (i) concerns apps that facilitate virtual currency
+> storage. SafeKey holds no currency and does not connect to any
+> blockchain; it stores text the user already has. The developer is
+> enrolled as an organization in any case.
 
-Note for us, not for Apple: the organization conversion should be complete
-before submission. Reviewers have applied 3.1.5 (iii) to key-storage apps
-before, and an individual account is the easiest reason for a rejection.
+Note for us, not for Apple: there is no guideline written for key-storage
+apps. The nearest one is 3.1.5 (i), "Wallets: Apps may facilitate virtual
+currency storage, provided they are offered by developers enrolled as an
+organization." Whether a seed-phrase vault counts as facilitating storage
+is a reviewer's call, and the way to make it moot is to submit from the
+organization account.
 
 ## What not to say anywhere in the listing
 
