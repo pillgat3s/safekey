@@ -6,9 +6,10 @@ again for the reviewer.
 
 ## Name (30 characters max)
 
-1. **SafeKey – Burner Wallet Vault** (29)
-2. **SafeKey: Seed Phrase Vault** (26)
-3. **SafeKey** (7) — with the subtitle doing the work
+**SafeKey – Crypto Key Vault** (26) — decided 2026-10-20 and created in App
+Store Connect under that name. Plain "SafeKey" is taken by another developer,
+and "Burner Wallet Vault" was rejected as a name. The name under the icon on
+the device stays "SafeKey" regardless; it comes from the app bundle.
 
 ## Subtitle (30 characters max)
 
@@ -16,8 +17,8 @@ again for the reviewer.
 2. **Seed phrases, out of Notes** (26)
 3. **A vault for throwaway wallets** (29)
 
-Recommended pair: name 1 with subtitle 2. The name says what it is for and
-the subtitle names the habit it replaces.
+Recommended: subtitle 2. The name already says what the app holds, so the
+subtitle should name the habit it replaces rather than repeat "keys".
 
 ## Promotional text (170 characters, editable without a review)
 
@@ -62,9 +63,9 @@ SafeKey is for the keys you'd be fine losing — a big step up from a Notes file
 
 ## Keywords (100 characters max, comma-separated, no spaces)
 
-seed phrase,private key,burner wallet,memecoin,solana,ethereum,crypto vault,encrypted,backup
+seed phrase,private key,burner wallet,memecoin,solana,ethereum,mnemonic,bitcoin,encrypted,backup
 
-(92 characters. Don't repeat words from the name or subtitle; the store
+(96 characters. "crypto" and "vault" dropped because they are in the name now. Don't repeat words from the name or subtitle; the store
 indexes those already.)
 
 ## Category
