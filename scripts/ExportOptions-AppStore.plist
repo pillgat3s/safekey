@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Store Connect: TestFlight and App Store review. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>teamID</key>
+	<string>RR9A8973M8</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<!-- Upload straight to App Store Connect with the account signed into Xcode. -->
+	<key>destination</key>
+	<string>upload</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<!-- Build numbers come from the release script, not from App Store Connect. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

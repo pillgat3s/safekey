@@ -40,6 +40,11 @@ OUT="$ROOT/build/release"
 ARCHIVE="$OUT/$PRODUCT.xcarchive"
 EXPORT="$OUT/export"
 
+# Builds come from the release Xcode, not a beta, unless told otherwise.
+if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode.app ]; then
+  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+fi
+
 usage() { sed -n '2,25p' "$0"; exit 1; }
 # Status goes to stderr: several functions hand their result back on stdout
 # for `$(...)`, and a stray status line inside that would corrupt the value.
@@ -83,7 +88,7 @@ archive() {
   rm -rf "$ARCHIVE"
   xcodebuild -project "$ROOT/SafeKey.xcodeproj" -scheme "$SCHEME" -configuration Release \
     -destination 'generic/platform=macOS' \
-    -archivePath "$ARCHIVE" MARKETING_VERSION="$VERSION" archive \
+    -archivePath "$ARCHIVE" MARKETING_VERSION="$VERSION" archive -allowProvisioningUpdates \
     | grep -E "error:|warning: .*(sign|entitle)|ARCHIVE (SUCCEEDED|FAILED)" >&2 || true
   [ -d "$ARCHIVE" ] || die "archive failed"
 }
