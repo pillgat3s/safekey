@@ -131,11 +131,11 @@ invented keys. Dark mode, 9:41, full signal.
 > enrolled as an organization in any case.
 
 Note for us, not for Apple: there is no guideline written for key-storage
-apps. The nearest one is 3.1.5 (i), "Wallets: Apps may facilitate virtual
-currency storage, provided they are offered by developers enrolled as an
-organization." Whether a seed-phrase vault counts as facilitating storage
-is a reviewer's call, and the way to make it moot is to submit from the
-organization account.
+apps, and SafeKey is not a wallet — it cannot transfer, trade or hold
+anything. The nearest clause is 3.1.5 (i), "Wallets: Apps may facilitate
+virtual currency storage, provided they are offered by developers enrolled
+as an organization." If a reviewer ever reached for it, the organization
+account already satisfies it, so there is nothing to argue.
 
 ## What not to say anywhere in the listing
 
