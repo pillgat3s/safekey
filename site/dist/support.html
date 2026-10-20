@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0c">
+  <title>Support — SafeKey</title>
+  <meta name="description" content="Get help with SafeKey, the encrypted vault for burner wallet keys. Answers to the questions that come up most, and how to reach us.">
+  <link rel="canonical" href="https://safekey.tws.sh/support">
+  <link rel="icon" type="image/png" href="assets/icon-512.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="header">
+    <div class="shell">
+      <a class="brand" href="/" aria-label="SafeKey home"><img src="assets/icon-512.png" alt="" width="34" height="34"><span>SafeKey</span></a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="/#features">Features</a>
+        <a href="/#security">Security</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+        <a class="pill" href="/#download">Get the beta</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="doc">
+    <p class="eyebrow">Support</p>
+    <h1>Questions, <span class="serif">answered.</span></h1>
+    <p class="intro">SafeKey is made by one person at Thomann Web Solutions. Write to us and you get a reply from someone who knows the code.</p>
+    <div class="contact-card">
+      <a href="mailto:info@tws.sh?subject=SafeKey">info@tws.sh</a>
+      <p>Include your device and the version from Settings in the app, and never include a seed phrase, private key or master password in an email.</p>
+    </div>
+
+    <h2>Before you write</h2>
+    <dl class="faq">
+      <dt>I forgot my master password.</dt>
+      <dd>There is no reset and no recovery, by design. The password is never stored and the vault is encrypted under a key derived from it, so nobody, including us, can open it without the password. If Face ID or Touch ID is still enabled on a device, that device can still open the vault. Open it there, and change the password in Settings.</dd>
+
+      <dt>Which wallets belong in SafeKey?</dt>
+      <dd>Burner and low-value wallets: the ones you'd otherwise keep in Notes, screenshots or chats. SafeKey is not built to hold significant funds. Keep larger amounts in dedicated, secure storage.</dd>
+
+      <dt>Screenshots of a revealed key come out blank. Is that a bug?</dt>
+      <dd>No. A revealed secret is drawn in a way that screenshots, screen recordings and screen mirroring cannot capture. If you need a key somewhere else, use the copy button; the clipboard is cleared after the interval set in Settings.</dd>
+
+      <dt>I restored the vault from iCloud on a new device and it keeps asking for the password.</dt>
+      <dd>Biometric unlock is tied to one device's Secure Enclave and never travels with the vault. After adopting the iCloud vault, SafeKey offers to turn Face ID or Touch ID on again; you can also do it any time in Settings.</dd>
+
+      <dt>Does SafeKey connect to my wallet or the blockchain?</dt>
+      <dd>No. It stores the text you give it and nothing more. It never shows balances, never signs and never sends anything. It can derive a Solana address from a secret on the device so you can check that a key was entered correctly, and that is all.</dd>
+
+      <dt>How do I delete everything?</dt>
+      <dd>Delete the app and everything it stored on that device is gone. If sync was on, use "Stop Syncing and Remove Copy" in Settings first to delete the copy in your iCloud account.</dd>
+
+      <dt>Where is the Mac version?</dt>
+      <dd>It ships as a notarized download outside the Mac App Store, together with version 1.0. It will be linked from the <a href="/#download">download section</a> when it is out.</dd>
+    </dl>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">
+      <span>© 2026 Thomann Web Solutions</span>
+      <nav aria-label="Footer"><a href="/privacy">Privacy</a><a href="/support">Support</a></nav>
+      <span class="by">Made in Switzerland by <a href="https://tws.sh/">tws.sh</a></span>
+    </div>
+  </footer>
+</body>
+</html>
