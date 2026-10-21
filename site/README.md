@@ -19,5 +19,5 @@ npm run deploy
 Screenshots in `dist/assets/` come from the demo vault:
 `Tests/SafeKeyiOSUITests/SiteStillsUITests.swift` for the iPhone
 (`TEST_RUNNER_SAFEKEY_SITE_STILLS=1 xcodebuild … test-without-building`) and
-`marketing/promo/tools/film_mac.sh` for the Mac. The copy follows
+`marketing/capture/film_mac.sh` for the Mac. The copy follows
 `marketing/launch/` and the positioning in `marketing/launch/copy-audit.md`.

@@ -63,9 +63,14 @@ h2 .serif{color:var(--blue-soft)}
 .never div{padding:28px 28px 30px;border-bottom:1px solid var(--line)}
 .never div:nth-child(odd){border-right:1px solid var(--line)}
 .never div:nth-last-child(-n+2){border-bottom:0}
+.never div:nth-child(even){border-right:1px solid var(--line)}
+.never div:nth-child(odd):not(:first-child){border-right:0}
 .never h3{font-size:1.05rem;font-weight:600;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
 .never h3 span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#1d2a3e;color:var(--blue-soft);font-size:.75rem}
 .never p{color:var(--muted);font-size:.95rem;line-height:1.65;margin-top:8px}
+.never div:first-child{grid-column:1/-1;border-right:0!important;background:linear-gradient(135deg,#0f1622,#101014)}
+.never a.inline{color:var(--blue-soft);border-bottom:1px solid #2b3a52}
+.never a.inline:hover{border-color:var(--blue-soft)}
 .callout{margin-top:48px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:center;background:linear-gradient(135deg,#0f1622,#101014);border:1px solid #2b3a52;border-radius:24px;padding:clamp(28px,4vw,48px)}
 .callout h3{font-size:clamp(1.6rem,2.6vw,2.3rem);letter-spacing:-.04em;font-weight:500;line-height:1.15}
 .callout p{color:#bfc5d2;margin-top:14px;line-height:1.65}

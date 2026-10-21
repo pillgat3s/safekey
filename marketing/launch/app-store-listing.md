@@ -130,14 +130,6 @@ invented keys. Dark mode, 9:41, full signal.
 > storage. SafeKey holds no currency and does not connect to any
 > blockchain; it stores text the user already has. The developer is
 > enrolled as an organization in any case.
-
-Note for us, not for Apple: there is no guideline written for key-storage
-apps, and SafeKey is not a wallet — it cannot transfer, trade or hold
-anything. The nearest clause is 3.1.5 (i), "Wallets: Apps may facilitate
-virtual currency storage, provided they are offered by developers enrolled
-as an organization." If a reviewer ever reached for it, the organization
-account already satisfies it, so there is nothing to argue.
-
 ## What not to say anywhere in the listing
 
 No "bank-grade", no "unhackable", no "military-grade". No recommendation of

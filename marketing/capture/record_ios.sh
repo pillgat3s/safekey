@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# tools/record_ios.sh <simulator-udid> <out-basename> <test> [max-seconds]
+# marketing/capture/record_ios.sh <simulator-udid> <out-basename> <test> [max-seconds]
 # Records the simulator while one PromoTourUITests test runs. Writes
 # <out>.mp4 and <out>.times: the moment recording started plus every
 # PROMO_MARK the test printed, so shots can be found in the footage.
 # Build first:  xcodebuild … -scheme SafeKeyiOS -derivedDataPath build/ios-tests build-for-testing
 set -u
 SIM="$1"; OUT="$2"; ONLY="$3"; MAX="${4:-300}"
-REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 rm -f "$OUT.mp4" "$OUT.rec.log"
 xcrun simctl io "$SIM" recordVideo --codec=h264 --force "$OUT.mp4" > "$OUT.rec.log" 2>&1 &
 REC=$!

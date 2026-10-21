@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tools/film_mac.sh <out-dir> — films the debug Mac build under PromoDirector.
+# marketing/capture/film_mac.sh <out-dir> — captures the debug Mac build under PromoDirector.
 # Runs a copy with its own bundle identifier: macOS will not give a second
 # instance of the installed app's identifier a window, and an identifier used
 # by an earlier, killed run can stay marked as running. The copy is ad-hoc
@@ -7,7 +7,7 @@
 # Build first:  xcodebuild … -scheme SafeKey -derivedDataPath build/mac build
 set -u
 OUT="$1"; STAMP=$(date +%s)
-REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$REPO/build/mac/Build/Products/Debug/SafeKey.app"
 DST="$HERE/build/SafeKeyPromo-$STAMP.app"

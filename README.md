@@ -1,12 +1,21 @@
 # SafeKey
 
-A local, fully encrypted vault for crypto wallet secrets — seed phrases and
-private keys — on **macOS 26** (styled after Apple's Passwords app) and
-**iOS 26**.
+An encrypted vault for the seed phrases and private keys of **burner and
+low-value crypto wallets** — the throwaway wallets that otherwise end up in
+Notes, screenshots or chats. For **iOS 26** and **macOS 26**, in the shape of
+Apple's Passwords app. Website: [safekey.tws.sh](https://safekey.tws.sh/).
+
+SafeKey is not built to hold significant funds, and it says so on its first
+screen. Keep larger amounts in dedicated, secure storage.
 
 No accounts, no telemetry, no servers of ours. The vault lives on the device
 and nothing leaves it unless you switch on iCloud sync, which is off until you
 do — and even then only ciphertext travels.
+
+The code is public under the GPL so that every one of those claims can be
+checked rather than believed. One honest limit: iOS does not allow
+reproducible builds, so the code shows what the app does, not that a given App
+Store binary was compiled from it. See [SECURITY.md](SECURITY.md).
 
 Both apps compile the same `SafeKeyCore` framework, so the encryption, the
 container format, and the self-destruct accounting are one audited source
@@ -15,14 +24,13 @@ opens on the other.
 
 ## Download
 
-Builds live on the [Releases page](https://github.com/pillgat3s/safekey/releases).
-Open the DMG and drag SafeKey to Applications. Each DMG ships with a
-`.sha256` file: `shasum -a 256 -c SafeKey-<version>.dmg.sha256` verifies it.
-
-A release marked **preview** is signed for development rather than notarized,
-and its provisioning profile lists specific Macs: it runs on the Mac that built
-it and on Macs registered to the developer team, and macOS refuses to launch it
-anywhere else. Notarized releases carry no such label and run on any Mac.
+- **iPhone and iPad:** public beta on
+  [TestFlight](https://testflight.apple.com/join/N5YJ4Vzm). The App Store
+  release follows with 1.0.
+- **Mac:** a notarized DMG on the
+  [Releases page](https://github.com/pillgat3s/safekey/releases), from 1.0.
+  Open the DMG and drag SafeKey to Applications. Each DMG ships with a
+  `.sha256` file: `shasum -a 256 -c SafeKey-<version>.dmg.sha256` verifies it.
 
 ## Security model
 
@@ -45,12 +53,14 @@ anywhere else. Notarized releases carry no such label and run on any Mac.
 
 ### Audit
 
-The crypto core was put through an adversarial multi-agent audit: five
-independent reviewers attacking different dimensions (AEAD envelope and KDF,
-second-factor bypass, container parsing and tamper-and-return, self-destruct
-accounting and Keychain, app state machine), then independent skeptics trying to
-*refute* each finding, with the survivors reproduced by compiled
-proof-of-concept before being accepted.
+The crypto core was put through an automated adversarial review, not a
+third-party audit: five review passes, each attacking a different dimension
+(AEAD envelope and KDF, second-factor bypass, container parsing and
+tamper-and-return, self-destruct accounting and Keychain, app state machine),
+then separate passes trying to *refute* each finding, with the survivors
+reproduced by compiled proof-of-concept before being accepted. It found real
+defects, listed below; it is no substitute for independent eyes, which is one
+reason the code is public.
 
 Verdict: the envelope, the AAD binding, the container parser bounds, and the
 two-factor derivation held up — no path to plaintext without the password. What
@@ -170,8 +180,8 @@ Run it:
 open build/Build/Products/Debug/SafeKey.app
 ```
 
-Tests (37 unit tests covering the crypto core, container format, atomic
-storage, self-destruct accounting, and the device factor):
+Tests — the unit suite covers the crypto core, container format, atomic
+storage, self-destruct accounting, sync and the device factor:
 
 ```bash
 xcodebuild -project SafeKey.xcodeproj -scheme SafeKey -destination 'platform=macOS' -derivedDataPath build test
@@ -183,9 +193,10 @@ xcodebuild -project SafeKey.xcodeproj -scheme SafeKey -destination 'platform=mac
 xcodegen generate && xcodebuild -project SafeKey.xcodeproj -scheme SafeKeyiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build build
 ```
 
-The whole iOS suite — 87 core tests plus 17 UI tests covering vault creation,
-adding wallets, revealing a secret, lock/unlock, wrong password, relaunch
-persistence, search, settings, Face ID, self-destruct, and groups:
+The whole iOS suite — core tests plus UI tests covering onboarding, the
+scope notice, vault creation, adding wallets, revealing a secret, lock/unlock,
+wrong password, relaunch persistence, search, settings, Face ID, self-destruct,
+and groups:
 
 ```bash
 xcodebuild -project SafeKey.xcodeproj -scheme SafeKeyiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build test
@@ -283,8 +294,12 @@ Sources/SafeKey/        macOS SwiftUI app
 Sources/SafeKeyiOS/     iOS SwiftUI app (list → detail, sheets, privacy cover)
 Sources/SafeKeyShared/  Used by both apps: vault session, chain artwork, SVG
 Tests/SafeKeyCoreTests/ Headless unit tests — no UI, no Keychain, no USB needed
-Tests/SafeKeyiOSUITests/ End-to-end iOS flows, biometrics, screenshot tour
-scripts/                Icon generation, simulator Face ID driver
+Tests/SafeKeyiOSUITests/ End-to-end iOS flows, biometrics, screenshot tour, website stills
+scripts/                Release pipelines (Mac DMG, TestFlight), icon generation, simulator Face ID driver
+ci_scripts/             Xcode Cloud: generates the project after cloning
+site/                   safekey.tws.sh — product page, privacy policy, support
+marketing/launch/       Listing copy, privacy policy source, security write-up
+marketing/capture/      Captures the demo vault on the simulator and the Mac
 FORMAT.md               Byte-level vault spec (for the planned Windows port)
 ```
 
@@ -323,3 +338,19 @@ hooks and the biometric diagnostic log do not exist in them at all.
 
 The Mac App Store is not a target: the disguise and the USB security key both
 need an unsandboxed app.
+
+`scripts/release-testflight.sh 1.0.0` archives the iOS app and uploads it to
+App Store Connect, where it appears under TestFlight once processed.
+
+## License
+
+SafeKey is free software under the
+[GNU General Public License, version 3](LICENSE). You can read it, build it,
+change it and redistribute it under the same terms.
+
+The **SafeKey name and icon are not covered by the license.** They identify
+the builds published by Thomann Web Solutions. A fork needs its own name and
+icon, so that nobody mistakes someone else's build for ours.
+
+Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md). Vulnerabilities: see
+[SECURITY.md](SECURITY.md).
