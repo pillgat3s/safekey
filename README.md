@@ -268,6 +268,23 @@ again, its secret hidden until tapped. Everything else — self-destruct,
 password change, encrypted backup and restore, chain-scoped groups, tags, real
 chain artwork, Solana address derivation — is present on both.
 
+**iPhone Duo.** The foldable gets both layouts and switches between them
+live as it opens and closes, since a fold is a size-class change rather than
+a new scene. Closed, the outer display is a compact-width iPhone with the
+status bar and every toolbar on a vertical rail, which the system builds
+from the same toolbar items the other iPhones use; the only requirement is
+that each item carries a symbol as well as a title, because a text-only item
+holds a horizontal bar open above the content. Open, the inner display is
+regular in both directions and shows the sidebar layout the iPad uses, with
+both columns kept on screen (`.balanced`) so the system can size them to the
+fold. The position carries across: `ResumeState` keeps the iPhone stack and
+the sidebar selection in step, so a wallet open on the outer display is the
+one selected when the device unfolds, and the other way round. Built with the
+iOS 27.1 SDK, which is what lets the app extend under the status bar and
+camera. The Duo simulator ships with Xcode 27.1; its pose is set in Xcode's
+Device Hub, and `xcrun simctl io <udid> screenshot --display 1` captures the
+outer display, `--display 3` the inner one.
+
 Try the macOS UI without touching your real vault — a throwaway temp vault with
 sample wallets:
 

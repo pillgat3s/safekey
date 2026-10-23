@@ -56,6 +56,33 @@ struct ResumeState {
     var splitSelection: VaultSplitView.Selection?
     var splitPath: [HomeRoute] = []
 
+    /// The iPhone layout moved. Its stack is a list step followed by wallets;
+    /// the sidebar layout says the same thing as a selection plus the wallets
+    /// pushed over it, so both are kept, and whichever layout the next size
+    /// class brings up — an iPhone Duo opening or closing swaps them live —
+    /// starts where this one was.
+    mutating func noteHome(_ path: [HomeRoute]) {
+        homePath = path
+        guard case .list(let filter)? = path.first else {
+            splitSelection = .tile(.all)
+            splitPath = []
+            return
+        }
+        splitSelection = VaultSplitView.Selection(filter)
+        splitPath = Array(path.dropFirst())
+    }
+
+    /// The sidebar layout moved; the same position expressed as a stack.
+    mutating func noteSplit(selection: VaultSplitView.Selection?, path: [HomeRoute]) {
+        splitSelection = selection
+        splitPath = path
+        guard let selection, selection != .tile(.all) || !path.isEmpty else {
+            homePath = []
+            return
+        }
+        homePath = [.list(selection.filter)] + path
+    }
+
     /// The same state with anything that no longer resolves dropped.
     @MainActor
     func validated(in session: VaultSession) -> ResumeState {
@@ -66,5 +93,31 @@ struct ResumeState {
         }
         state.splitPath = splitPath.validated(in: session)
         return state
+    }
+}
+
+extension VaultSplitView.Selection {
+    /// The sidebar row that shows the same wallets as a list step.
+    init(_ filter: EntryFilter) {
+        switch filter {
+        case .all: self = .tile(.all)
+        case .favorites: self = .tile(.favorites)
+        case .seedPhrases: self = .tile(.seedPhrases)
+        case .privateKeys: self = .tile(.privateKeys)
+        case .chain(let chain): self = .chain(chain)
+        case .group(let id): self = .group(id)
+        }
+    }
+
+    /// The list step that shows the same wallets as this sidebar row.
+    var filter: EntryFilter {
+        switch self {
+        case .tile(.all): .all
+        case .tile(.favorites): .favorites
+        case .tile(.seedPhrases): .seedPhrases
+        case .tile(.privateKeys): .privateKeys
+        case .chain(let chain): .chain(chain)
+        case .group(let id): .group(id)
+        }
     }
 }

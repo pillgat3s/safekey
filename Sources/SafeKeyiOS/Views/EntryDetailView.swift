@@ -182,8 +182,14 @@ struct EntryDetailView: View {
                         }
                         ToolbarSpacer(.fixed, placement: .topBarTrailing)
                     }
+                    // A symbol as well as the title: on iPhone Duo's outer
+                    // display the bars stand on the side, and an item that is
+                    // text only cannot join them — it would hold a whole
+                    // horizontal bar open above the content for one word.
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Edit") { isEditing = true }
+                        Button { isEditing = true } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
                     }
                 }
                 .sheet(isPresented: $isEditing) {

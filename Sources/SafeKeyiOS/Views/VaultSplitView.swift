@@ -48,9 +48,15 @@ struct VaultSplitView: View {
     var body: some View {
         NavigationSplitView {
             sidebar
+                .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
         } detail: {
             detail
         }
+        // Both columns side by side, as the Passwords app keeps them: the
+        // sidebar is a place to stand, not a drawer that covers the list. On
+        // iPhone Duo's inner display the system then sizes the two columns to
+        // the fold, so neither straddles it when the device is half open.
+        .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showingAdd) {
             EntryEditView(session: session, existing: nil)
         }
@@ -64,10 +70,9 @@ struct VaultSplitView: View {
             // A different list starts at its root; a wallet pushed over the
             // old one would otherwise stay up over the new.
             detailPath = []
-            model.resume.splitSelection = current
-            model.resume.splitPath = []
+            model.resume.noteSplit(selection: current, path: [])
         }
-        .onChange(of: detailPath) { _, current in model.resume.splitPath = current }
+        .onChange(of: detailPath) { _, current in model.resume.noteSplit(selection: selection, path: current) }
         .modifier(BiometricOffer(
             session: session,
             sheetsPresented: showingSettings || showingAdd || showingNewGroup
