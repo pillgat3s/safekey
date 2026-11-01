@@ -1,6 +1,6 @@
 import XCTest
 
-/// Groups: create from the bottom bar, assign while editing a wallet, then
+/// Groups: create from a wallet's Group row — which puts the wallet in — then
 /// rename and delete by long-pressing the group on the home screen.
 ///
 /// The delete case matters most — a group is a folder, and tidying a folder
@@ -61,15 +61,29 @@ final class GroupsUITests: XCTestCase {
         )
     }
 
-    /// Creates a group from the bottom bar, the way the app offers it.
-    private func createGroup(named name: String) {
-        app.buttons["New Group"].tap()
+    /// Creates a group from a wallet's own screen — the Group row's menu —
+    /// which is where the app offers it. The wallet goes into the new group.
+    private func createGroup(named name: String, fromWalletNamed wallet: String) {
+        openAll()
+        XCTAssertTrue(app.staticTexts[wallet].waitForExistence(timeout: timeout))
+        app.staticTexts[wallet].tap()
+        let row = app.buttons["detail.groupRow"]
+        XCTAssertTrue(row.waitForExistence(timeout: timeout), "no group row on the wallet screen")
+        row.tap()
+        let newGroup = app.buttons["New Group…"]
+        XCTAssertTrue(newGroup.waitForExistence(timeout: timeout), "the Group row should offer a new group")
+        newGroup.tap()
+
         XCTAssertTrue(app.navigationBars["New Group"].waitForExistence(timeout: timeout))
         let field = app.textFields["group.name"]
         XCTAssertTrue(field.waitForExistence(timeout: timeout))
         field.tap()
         field.typeText(name)
         app.buttons["Create"].tap()
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: timeout), "the wallet's Group row should show the new group")
+
+        app.navigationBars.buttons.firstMatch.tap()
+        backToHome()
         XCTAssertTrue(groupRow(name).waitForExistence(timeout: timeout), "the new group should appear on the home screen")
     }
 
@@ -143,15 +157,15 @@ final class GroupsUITests: XCTestCase {
 
     func testCreatedGroupIsListedOnHome() throws {
         try createVault()
-        createGroup(named: "Day Trading")
+        addWallet(name: "Trading")
+        createGroup(named: "Day Trading", fromWalletNamed: "Trading")
         XCTAssertTrue(app.staticTexts["Day Trading"].waitForExistence(timeout: timeout))
     }
 
     func testRenamingAGroupUpdatesTheWalletRow() throws {
         try createVault()
-        createGroup(named: "Day Trading")
         addWallet(name: "Trading")
-        assignGroup("Day Trading", toWalletNamed: "Trading")
+        createGroup(named: "Day Trading", fromWalletNamed: "Trading")
 
         groupRow("Day Trading").press(forDuration: 1.2)
         app.buttons["Rename"].tap()
@@ -178,9 +192,8 @@ final class GroupsUITests: XCTestCase {
     /// Deleting a group must keep its wallets.
     func testDeletingAGroupKeepsItsWallets() throws {
         try createVault()
-        createGroup(named: "Day Trading")
         addWallet(name: "Trading")
-        assignGroup("Day Trading", toWalletNamed: "Trading")
+        createGroup(named: "Day Trading", fromWalletNamed: "Trading")
 
         groupRow("Day Trading").press(forDuration: 1.2)
         app.buttons["Delete Group"].tap()

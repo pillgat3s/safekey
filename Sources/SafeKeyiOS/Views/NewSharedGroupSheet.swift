@@ -1,134 +1,154 @@
 import SwiftUI
 import SafeKeyCore
 
-/// Creating a shared group, in the steps the Passwords app uses: name it,
-/// add people, then choose which wallets to move in.
+/// Creating a shared group, in the steps the Passwords app uses: a page that
+/// says what sharing means, then the group's name and people on one form
+/// created with the checkmark, then the wallets to move in.
 ///
-/// The group exists in iCloud from the moment Create is tapped — its zone is
-/// made first, so there is somewhere for the wallets to go — and the next two
-/// steps can each be skipped and done later from the group's Manage screen.
+/// People can be invited before the group is "created": CloudKit needs the
+/// zone to exist for an invitation, so the first tap on Add People makes the
+/// zone under the name typed so far, and the checkmark only settles the name.
+/// Cancelling after that takes the zone away again.
 struct NewSharedGroupSheet: View {
     let session: VaultSession
+    /// Set by a wallet's own screen: the group is for that wallet, so the
+    /// move step is skipped and the caller puts the wallet in.
+    var onCreated: ((WalletGroup) -> Void)?
+
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
     private enum Step {
-        case name
-        case people(WalletGroup)
+        case intro
+        case create
         case move(WalletGroup)
     }
 
-    @State private var step: Step = .name
+    @State private var step: Step = .intro
     @State private var name = ""
-    @State private var isCreating = false
+    @State private var created: WalletGroup?
+    @State private var isWorking = false
     @State private var failure: String?
     @State private var showingInvite = false
+    @FocusState private var nameFocused: Bool
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var nameIsTaken: Bool {
-        session.sharedGroups.contains { $0.name.compare(trimmedName, options: .caseInsensitive) == .orderedSame }
+        session.sharedGroups.contains {
+            $0.id != created?.id && $0.name.compare(trimmedName, options: .caseInsensitive) == .orderedSame
+        }
     }
 
     var body: some View {
         NavigationStack {
             switch step {
-            case .name:
-                nameStep
-            case .people(let group):
-                peopleStep(group)
+            case .intro:
+                intro
+            case .create:
+                createForm
             case .move(let group):
                 MoveWalletsView(session: session, group: group) { dismiss() }
             }
         }
-        .interactiveDismissDisabled(isCreating)
+        .interactiveDismissDisabled(isWorking || created != nil)
     }
 
-    // MARK: - Name
+    // MARK: - What sharing means
 
-    private var nameStep: some View {
+    private var intro: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            SharedGroupMark(size: 88)
+            Text("Share Wallets With People You Trust")
+                .font(.title.bold())
+                .multilineTextAlignment(.center)
+                .padding(.top, 20)
+                .padding(.horizontal, 32)
+            VStack(alignment: .leading, spacing: 22) {
+                introRow(
+                    "person.2.fill",
+                    title: "Everyone Can Use Them",
+                    text: "People in the group see the wallets you move in, and can edit them or add their own."
+                )
+                introRow(
+                    "lock.fill",
+                    title: "Encrypted End to End",
+                    text: "The group's wallets are sealed under a key made for the group. Your vault's own key is never shared."
+                )
+                introRow(
+                    "hand.raised.fill",
+                    title: "You Stay in Control",
+                    text: "Only you can add or remove people, rename the group, or delete it. Keep anything that is yours alone out of it."
+                )
+            }
+            .padding(.top, 34)
+            .padding(.horizontal, 32)
+            Spacer()
+            Button {
+                step = .create
+            } label: {
+                Text("Continue")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.glassProminent)
+            .accessibilityIdentifier("sharedGroup.continue")
+            .padding(.horizontal, 24)
+            .padding(.bottom, 20)
+        }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button { dismiss() } label: { Image(systemName: "xmark") }
+                    .accessibilityLabel("Cancel")
+            }
+        }
+    }
+
+    private func introRow(_ symbol: String, title: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            Image(systemName: symbol)
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 36)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline)
+                Text(text).font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Name and people
+
+    private var canCreate: Bool {
+        !trimmedName.isEmpty && !nameIsTaken && !isWorking
+    }
+
+    private var createForm: some View {
         Form {
             Section {
                 VStack(spacing: 12) {
                     SharedGroupMark(size: 64)
-                    Text("Everyone in the group can see and edit the wallets in it. Only you can add or remove people, rename the group, or delete it.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    TextField("Group Name", text: $name, prompt: Text("Group Name"))
+                        .font(.title2.bold())
                         .multilineTextAlignment(.center)
+                        .focused($nameFocused)
+                        .submitLabel(.done)
+                        .onSubmit { nameFocused = false }
+                        .accessibilityIdentifier("sharedGroup.name")
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
                 .listRowBackground(Color.clear)
-            }
-            Section {
-                TextField("Group Name", text: $name, prompt: Text("e.g. Ops Team"))
-                    .accessibilityIdentifier("sharedGroup.name")
-                    .submitLabel(.done)
-                    .onSubmit { if canCreate { create() } }
             } footer: {
                 if nameIsTaken {
                     Text("There is already a shared group with that name.")
                         .foregroundStyle(.red)
-                } else if let failure {
-                    Text(failure).foregroundStyle(.red)
-                } else {
-                    Text("Wallets you move into the group leave your own vault and are shared with its members. Keep anything that is yours alone out of it.")
+                        .frame(maxWidth: .infinity)
                 }
-            }
-        }
-        .navigationTitle("New Shared Group")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-                    .disabled(isCreating)
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                if isCreating {
-                    ProgressView()
-                } else {
-                    Button("Create") { create() }
-                        .disabled(!canCreate)
-                        .accessibilityIdentifier("sharedGroup.create")
-                }
-            }
-        }
-    }
-
-    private var canCreate: Bool {
-        !trimmedName.isEmpty && !nameIsTaken && !isCreating
-    }
-
-    private func create() {
-        guard canCreate else { return }
-        isCreating = true
-        failure = nil
-        Task {
-            do {
-                let group = try await model.sync.createSharedGroup(name: trimmedName, session: session)
-                step = .people(group)
-            } catch {
-                failure = error.localizedDescription
-            }
-            isCreating = false
-        }
-    }
-
-    // MARK: - People
-
-    private func peopleStep(_ group: WalletGroup) -> some View {
-        Form {
-            Section {
-                VStack(spacing: 10) {
-                    SharedGroupMark(size: 64)
-                    Text(group.name)
-                        .font(.title2.bold())
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .listRowBackground(Color.clear)
             }
             Section {
                 HStack {
@@ -137,29 +157,102 @@ struct NewSharedGroupSheet: View {
                     Text("Owner").foregroundStyle(.secondary)
                 }
                 Button {
-                    showingInvite = true
+                    addPeople()
                 } label: {
                     Label("Add People…", systemImage: "person.badge.plus")
                 }
+                .disabled(isWorking)
                 .accessibilityIdentifier("sharedGroup.addPeople")
             } header: {
                 Text("Group Members")
             } footer: {
-                Text("People you invite get a link through Messages, Mail, or any app you choose. They need SafeKey and an iCloud account, and they see the group's wallets as soon as they accept.")
+                if let failure {
+                    Text(failure).foregroundStyle(.red)
+                } else {
+                    Text("People you invite get a link through Messages, Mail, or any app you choose. They need SafeKey and an iCloud account, and they see the group's wallets as soon as they accept.")
+                }
             }
         }
-        .navigationTitle("Add People")
+        .defaultFocus($nameFocused, true)
+        .onAppear { nameFocused = true }
+        .navigationTitle("New Shared Group")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden()
         .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button { cancel() } label: { Image(systemName: "xmark") }
+                    .accessibilityLabel("Cancel")
+                    .disabled(isWorking)
+            }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Next") { step = .move(group) }
-                    .accessibilityIdentifier("sharedGroup.next")
+                if isWorking {
+                    ProgressView()
+                } else {
+                    Button { create() } label: { Image(systemName: "checkmark") }
+                        .buttonStyle(.glassProminent)
+                        .accessibilityLabel("Create")
+                        .accessibilityIdentifier("sharedGroup.create")
+                        .disabled(!canCreate)
+                }
             }
         }
         .sheet(isPresented: $showingInvite) {
-            SharedGroupInviteSheet(session: session, group: group)
+            if let created {
+                SharedGroupInviteSheet(session: session, group: created)
+            }
         }
+    }
+
+    /// Makes the group in iCloud if it does not exist yet, under the name
+    /// typed so far, so there is something to invite people to.
+    private func ensureCreated() async -> WalletGroup? {
+        if let created { return created }
+        isWorking = true
+        failure = nil
+        defer { isWorking = false }
+        do {
+            let group = try await model.sync.createSharedGroup(
+                name: trimmedName.isEmpty ? SharedGroupPartition.placeholderName : trimmedName,
+                session: session
+            )
+            created = group
+            return group
+        } catch {
+            failure = error.localizedDescription
+            return nil
+        }
+    }
+
+    private func addPeople() {
+        Task {
+            guard await ensureCreated() != nil else { return }
+            showingInvite = true
+        }
+    }
+
+    private func create() {
+        guard canCreate else { return }
+        Task {
+            guard var group = await ensureCreated() else { return }
+            if group.name != trimmedName {
+                group.name = trimmedName
+                session.updateGroup(group)
+            }
+            if let onCreated {
+                onCreated(group)
+                dismiss()
+            } else {
+                step = .move(group)
+            }
+        }
+    }
+
+    /// Cancelling after people were invited takes the group away again: a
+    /// group that was never created should not be left behind in iCloud.
+    private func cancel() {
+        if let created {
+            session.deleteSharedGroup(id: created.id)
+        }
+        dismiss()
     }
 }
 
@@ -225,6 +318,7 @@ struct MoveWalletsView: View {
                     session.move(entryIDs: Array(selected), toGroup: group.id)
                     onDone()
                 }
+                .buttonStyle(.glassProminent)
                 .disabled(selected.isEmpty)
                 .accessibilityIdentifier("sharedGroup.move")
             }

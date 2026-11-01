@@ -19,14 +19,10 @@ extension XCTestCase {
 }
 
 extension XCUIApplication {
-    /// The + on the home screen is a menu — New Wallet or New Shared Group —
-    /// so adding a wallet is two taps.
+    /// The + on the home screen opens the new-wallet sheet.
     func tapAddWallet(timeout: TimeInterval = 10) {
-        let add = buttons["home.add"]
+        let add = buttons["Add Wallet"]
         XCTAssertTrue(add.waitForExistence(timeout: timeout), "no add button on the home screen")
         add.tap()
-        let item = buttons["New Wallet"]
-        XCTAssertTrue(item.waitForExistence(timeout: timeout), "the add menu did not offer New Wallet")
-        item.tap()
     }
 }

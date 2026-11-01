@@ -12,7 +12,7 @@ struct EntryDetailView: View {
     @State private var isEditing = false
     @State private var notice: String?
     @State private var creatingGroup = false
-    @State private var newGroupName = ""
+    @State private var creatingSharedGroup = false
 
     private var entry: WalletEntry? { session.entry(id: entryID) }
 
@@ -126,9 +126,13 @@ struct EntryDetailView: View {
                         // credential between groups from its own screen.
                         Menu {
                             Picker("Group", selection: groupBinding(for: entry)) {
-                                Text("None").tag(UUID?.none)
-                                ForEach(session.groups(for: entry.chain)) { group in
-                                    Text(group.name).tag(UUID?.some(group.id))
+                                Text("Not Shared").tag(UUID?.none)
+                                if !session.groups(for: entry.chain).isEmpty {
+                                    Section("Groups") {
+                                        ForEach(session.groups(for: entry.chain)) { group in
+                                            Text(group.name).tag(UUID?.some(group.id))
+                                        }
+                                    }
                                 }
                                 // Shared groups take any chain; moving in
                                 // shares the wallet with everyone in them.
@@ -142,15 +146,19 @@ struct EntryDetailView: View {
                             }
                             Divider()
                             Button {
-                                newGroupName = ""
+                                creatingSharedGroup = true
+                            } label: {
+                                Label("New Shared Group…", systemImage: "person.2.badge.plus")
+                            }
+                            Button {
                                 creatingGroup = true
                             } label: {
-                                Label("New Group…", systemImage: "plus.circle")
+                                Label("New Group…", systemImage: "folder.badge.plus")
                             }
                         } label: {
                             row("Group") {
                                 HStack(spacing: 4) {
-                                    Text(session.group(id: entry.groupID)?.name ?? "None")
+                                    Text(session.group(id: entry.groupID)?.name ?? "Not Shared")
                                     Image(systemName: "chevron.up.chevron.down")
                                         .font(.caption2)
                                 }
@@ -204,12 +212,15 @@ struct EntryDetailView: View {
                 .sheet(isPresented: $isEditing) {
                     EntryEditView(session: session, existing: entry)
                 }
-                .alert("New Group", isPresented: $creatingGroup) {
-                    TextField("Group name", text: $newGroupName)
-                    Button("Cancel", role: .cancel) { newGroupName = "" }
-                    Button("Create") { createGroup(for: entry) }
-                } message: {
-                    Text("Groups organise wallets within \(entry.chain.displayName).")
+                .sheet(isPresented: $creatingGroup) {
+                    NewGroupSheet(session: session, chain: entry.chain) { group in
+                        session.move(entryID: entry.id, toGroup: group.id)
+                    }
+                }
+                .sheet(isPresented: $creatingSharedGroup) {
+                    NewSharedGroupSheet(session: session) { group in
+                        session.move(entryID: entry.id, toGroup: group.id)
+                    }
                 }
                 .overlay(alignment: .bottom) {
                     if let notice {
@@ -261,14 +272,6 @@ struct EntryDetailView: View {
             get: { entry.groupID },
             set: { session.move(entryID: entry.id, toGroup: $0) }
         )
-    }
-
-    private func createGroup(for entry: WalletEntry) {
-        let name = newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
-        newGroupName = ""
-        guard !name.isEmpty else { return }
-        let group = session.addGroup(name: name, chain: entry.chain, colorHex: nil)
-        session.move(entryID: entry.id, toGroup: group.id)
     }
 
     private func toggleReveal(_ entry: WalletEntry) {

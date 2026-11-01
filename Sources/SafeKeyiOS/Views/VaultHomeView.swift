@@ -35,7 +35,6 @@ struct VaultHomeView: View {
     @State private var searchText = ""
     @State private var showingAdd = false
     @State private var showingSettings = false
-    @State private var showingNewGroup = false
     @State private var showingNewSharedGroup = false
     @State private var managingGroup: WalletGroup?
     @State private var dragging: VaultSettings.HomeTile?
@@ -337,12 +336,13 @@ struct VaultHomeView: View {
                         Label("Settings", systemImage: "gearshape")
                     }
                 }
-                // New group, where iOS puts the same action in a credential
-                // vault. Locking moved into Settings; the vault also locks
+                // New shared group, where the Passwords app puts the same
+                // button. The vault's own groups are made from a wallet's
+                // Group row. Locking moved into Settings; the vault also locks
                 // itself whenever the app leaves the foreground.
                 ToolbarItem(placement: .bottomBar) {
-                    Button { showingNewGroup = true } label: {
-                        Label("New Group", systemImage: "folder.badge.plus")
+                    Button { showingNewSharedGroup = true } label: {
+                        Label("New Shared Group", systemImage: "folder.badge.plus")
                     }
                 }
                 // The system search field sits between the two buttons and
@@ -353,20 +353,10 @@ struct VaultHomeView: View {
                 ToolbarSpacer(.fixed, placement: .bottomBar)
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarSpacer(.fixed, placement: .bottomBar)
-                // New wallet or new shared group, under one plus — where the
-                // Passwords app keeps both.
                 ToolbarItem(placement: .bottomBar) {
-                    Menu {
-                        Button { showingAdd = true } label: {
-                            Label("New Wallet", systemImage: "key.fill")
-                        }
-                        Button { showingNewSharedGroup = true } label: {
-                            Label("New Shared Group", systemImage: "person.2.fill")
-                        }
-                    } label: {
-                        Label("Add", systemImage: "plus")
+                    Button { showingAdd = true } label: {
+                        Label("Add Wallet", systemImage: "plus")
                     }
-                    .accessibilityIdentifier("home.add")
                 }
             }
             .sheet(isPresented: $showingAdd) {
@@ -374,9 +364,6 @@ struct VaultHomeView: View {
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView(session: session)
-            }
-            .sheet(isPresented: $showingNewGroup) {
-                NewGroupSheet(session: session)
             }
             .sheet(isPresented: $showingNewSharedGroup) {
                 NewSharedGroupSheet(session: session)
@@ -386,7 +373,7 @@ struct VaultHomeView: View {
             }
             .modifier(BiometricOffer(
                 session: session,
-                sheetsPresented: showingSettings || showingAdd || showingNewGroup || showingNewSharedGroup || managingGroup != nil
+                sheetsPresented: showingSettings || showingAdd || showingNewSharedGroup || managingGroup != nil
             ))
             .onChange(of: path) { _, current in model.resume.noteHome(current) }
             // A group can go while its list is up — deleted or left from its

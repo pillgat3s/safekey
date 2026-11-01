@@ -96,28 +96,30 @@ final class SharedGroupsUITests: XCTestCase {
 
     // MARK: - The flow
 
-    /// Creates "Ops Team" from the + menu and moves one of two wallets into
-    /// it through the steps the sheet offers.
+    /// Creates "Ops Team" from the bottom bar's New Shared Group button and
+    /// moves one of two wallets into it, through the steps the Passwords app
+    /// uses: the page that says what sharing means, the name and people, the
+    /// wallets to move.
     private func createSharedGroup(named name: String, moving wallet: String) {
-        app.buttons["home.add"].tap()
-        let item = app.buttons["New Shared Group"]
-        XCTAssertTrue(item.waitForExistence(timeout: timeout), "the + menu should offer a new shared group")
-        captureScreen("shared-add-menu")
-        item.tap()
+        let button = app.buttons["New Shared Group"]
+        XCTAssertTrue(button.waitForExistence(timeout: timeout), "the bottom bar should offer a new shared group")
+        button.tap()
+
+        let cont = app.buttons["sharedGroup.continue"]
+        XCTAssertTrue(cont.waitForExistence(timeout: timeout), "the first page says what sharing means")
+        captureScreen("shared-intro")
+        cont.tap()
 
         XCTAssertTrue(app.navigationBars["New Shared Group"].waitForExistence(timeout: timeout))
         let field = app.textFields["sharedGroup.name"]
         XCTAssertTrue(field.waitForExistence(timeout: timeout))
-        field.tap()
+        // The name has the keyboard straight away, without a tap.
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the name should be focused on arrival")
         field.typeText(name)
+        XCTAssertTrue(app.buttons["sharedGroup.addPeople"].exists, "people are added on the same form")
         captureScreen("shared-new-name")
+        // Add People needs iCloud for the invitation, so it is passed over.
         app.buttons["sharedGroup.create"].tap()
-
-        // Add People: the invitation needs iCloud, so the step is passed over.
-        XCTAssertTrue(app.navigationBars["Add People"].waitForExistence(timeout: timeout), "creating should lead to adding people")
-        XCTAssertTrue(app.buttons["sharedGroup.addPeople"].exists)
-        captureScreen("shared-add-people")
-        app.buttons["sharedGroup.next"].tap()
 
         XCTAssertTrue(app.navigationBars["Move Wallets"].waitForExistence(timeout: timeout))
         let move = app.buttons["sharedGroup.move"]
@@ -214,6 +216,29 @@ final class SharedGroupsUITests: XCTestCase {
         addWallet(name: "Team hot wallet")
         addWallet(name: "Mine")
         createSharedGroup(named: "Ops Team", moving: "Team hot wallet")
+
+        // A new wallet's form: the name has the keyboard straight away, and
+        // the Group row sits at the bottom, before the notes, reading "Not
+        // Shared" until a group is chosen.
+        app.tapAddWallet()
+        XCTAssertTrue(app.navigationBars["New Wallet"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the name should be focused on arrival")
+        app.swipeUp()
+        app.swipeUp()
+        let formRow = app.buttons["entry.groupRow"]
+        XCTAssertTrue(formRow.waitForExistence(timeout: timeout), "the form should have a Group row")
+        XCTAssertTrue(formRow.label.contains("Not Shared"), "a new wallet starts out not shared, got \(formRow.label)")
+        captureScreen("shared-new-wallet-form")
+        formRow.tap()
+        XCTAssertTrue(app.buttons["Ops Team"].waitForExistence(timeout: timeout), "the form's Group row should offer the shared group")
+        XCTAssertTrue(app.buttons["New Shared Group…"].exists)
+        captureScreen("shared-new-wallet-group-menu")
+        app.buttons["Ops Team"].tap()
+        XCTAssertTrue(formRow.label.contains("Ops Team"))
+        app.buttons["Cancel"].tap()
+        let discard = app.buttons["Discard Changes"]
+        if discard.waitForExistence(timeout: 3) { discard.tap() }
+        XCTAssertTrue(app.buttons["tile.All"].waitForExistence(timeout: timeout))
 
         app.buttons["tile.All"].tap()
         XCTAssertTrue(app.staticTexts["Mine"].waitForExistence(timeout: timeout))

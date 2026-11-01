@@ -32,7 +32,6 @@ struct VaultSplitView: View {
     }
     @State private var showingAdd = false
     @State private var showingSettings = false
-    @State private var showingNewGroup = false
     @State private var showingNewSharedGroup = false
     @State private var managingGroup: WalletGroup?
     @State private var renamingGroup: WalletGroup?
@@ -73,9 +72,6 @@ struct VaultSplitView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(session: session)
         }
-        .sheet(isPresented: $showingNewGroup) {
-            NewGroupSheet(session: session)
-        }
         .sheet(isPresented: $showingNewSharedGroup) {
             NewSharedGroupSheet(session: session)
         }
@@ -101,7 +97,7 @@ struct VaultSplitView: View {
         }
         .modifier(BiometricOffer(
             session: session,
-            sheetsPresented: showingSettings || showingAdd || showingNewGroup || showingNewSharedGroup || managingGroup != nil
+            sheetsPresented: showingSettings || showingAdd || showingNewSharedGroup || managingGroup != nil
         ))
         .alert("Rename Group", isPresented: renameBinding) {
             TextField("Group name", text: $renameText)
@@ -235,31 +231,17 @@ struct VaultSplitView: View {
                 }
             }
             ToolbarItem(placement: .bottomBar) {
-                Button { showingNewGroup = true } label: {
-                    Label("New Group", systemImage: "folder.badge.plus")
+                Button { showingNewSharedGroup = true } label: {
+                    Label("New Shared Group", systemImage: "folder.badge.plus")
                 }
             }
             ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
-                addMenu
+                Button { showingAdd = true } label: {
+                    Label("Add Wallet", systemImage: "plus")
+                }
             }
         }
-    }
-
-    /// New wallet or new shared group, under one plus — where the Passwords
-    /// app keeps both.
-    private var addMenu: some View {
-        Menu {
-            Button { showingAdd = true } label: {
-                Label("New Wallet", systemImage: "key.fill")
-            }
-            Button { showingNewSharedGroup = true } label: {
-                Label("New Shared Group", systemImage: "person.2.fill")
-            }
-        } label: {
-            Label("Add", systemImage: "plus")
-        }
-        .accessibilityIdentifier("home.add")
     }
 
     @ViewBuilder

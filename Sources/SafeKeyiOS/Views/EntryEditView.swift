@@ -16,8 +16,9 @@ struct EntryEditView: View {
     @State private var favorite = false
     @State private var showingChainPicker = false
     @State private var groupID: UUID?
-    @State private var newGroupName = ""
     @State private var showingNewGroup = false
+    @State private var showingNewSharedGroup = false
+    @FocusState private var nameFocused: Bool
     @State private var derivedAddresses: [SolanaAddress.Candidate] = []
     @State private var derivationError: String?
     @State private var isDeriving = false
@@ -78,6 +79,7 @@ struct EntryEditView: View {
 
                 Section {
                     TextField("Name", text: $name, prompt: Text("e.g. Sniper Bot 3"))
+                        .focused($nameFocused)
                         .accessibilityIdentifier("entry.name")
                     Button {
                         showingChainPicker = true
@@ -88,25 +90,6 @@ struct EntryEditView: View {
                             ChainLogo(chain: chain, size: 22)
                             Text(chain.displayName).foregroundStyle(.secondary)
                         }
-                    }
-                    // Groups belong to a chain, so the choices change with it
-                    // and a group from the old chain must not linger.
-                    Picker("Group", selection: $groupID) {
-                        Text("None").tag(UUID?.none)
-                        ForEach(session.groups(for: chain)) { group in
-                            Text(group.name).tag(UUID?.some(group.id))
-                        }
-                        if !session.sharedGroups.isEmpty {
-                            Section("Shared Groups") {
-                                ForEach(session.sharedGroups) { group in
-                                    Label(group.name, systemImage: "person.2").tag(UUID?.some(group.id))
-                                }
-                            }
-                        }
-                    }
-                    Button("New Group…") {
-                        newGroupName = ""
-                        showingNewGroup = true
                     }
                     Picker("Type", selection: $isSeedPhrase) {
                         Text("Seed Phrase").tag(true)
@@ -202,24 +185,81 @@ struct EntryEditView: View {
                     Toggle("Favorite", isOn: $favorite)
                 }
 
+                // The group comes last but for the notes, where the Passwords
+                // app keeps it: "Not Shared" until a shared group is chosen.
+                // The vault's own groups belong to a chain, so the choices
+                // change with it; a shared group takes any chain.
+                Section {
+                    Menu {
+                        Picker("Group", selection: $groupID) {
+                            Text("Not Shared").tag(UUID?.none)
+                            if !session.groups(for: chain).isEmpty {
+                                Section("Groups") {
+                                    ForEach(session.groups(for: chain)) { group in
+                                        Text(group.name).tag(UUID?.some(group.id))
+                                    }
+                                }
+                            }
+                            if !session.sharedGroups.isEmpty {
+                                Section("Shared Groups") {
+                                    ForEach(session.sharedGroups) { group in
+                                        Label(group.name, systemImage: "person.2").tag(UUID?.some(group.id))
+                                    }
+                                }
+                            }
+                        }
+                        Divider()
+                        Button {
+                            showingNewSharedGroup = true
+                        } label: {
+                            Label("New Shared Group…", systemImage: "person.2.badge.plus")
+                        }
+                        Button {
+                            showingNewGroup = true
+                        } label: {
+                            Label("New Group…", systemImage: "folder.badge.plus")
+                        }
+                    } label: {
+                        // Explicit colours: a menu's label is tinted otherwise,
+                        // and this is a form row, not a button.
+                        HStack {
+                            Text("Group").foregroundStyle(Color.primary)
+                            Spacer()
+                            Text(session.group(id: groupID)?.name ?? "Not Shared")
+                                .foregroundStyle(Color.secondary)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2)
+                                .foregroundStyle(Color.secondary)
+                        }
+                    }
+                    .accessibilityIdentifier("entry.groupRow")
+                }
+
                 Section("Notes") {
                     TextEditor(text: $notes).frame(minHeight: 60)
                 }
             }
+            .defaultFocus($nameFocused, existing == nil)
             .navigationTitle(existing == nil ? "New Wallet" : "Edit Wallet")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button {
                         if hasUnsavedChanges {
                             confirmingDiscard = true
                         } else {
                             dismiss()
                         }
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }.disabled(!canSave)
+                    Button { save() } label: { Image(systemName: "checkmark") }
+                        .buttonStyle(.glassProminent)
+                        .accessibilityLabel("Save")
+                        .disabled(!canSave)
                 }
             }
             .sheet(isPresented: $showingChainPicker) {
@@ -233,14 +273,16 @@ struct EntryEditView: View {
                     self.groupID = nil
                 }
             }
-            .alert("New Group", isPresented: $showingNewGroup) {
-                TextField("Group name", text: $newGroupName)
-                Button("Cancel", role: .cancel) { newGroupName = "" }
-                Button("Create") { createGroup() }
-            } message: {
-                Text("Groups organise wallets within \(chain.displayName).")
+            .sheet(isPresented: $showingNewGroup) {
+                NewGroupSheet(session: session, chain: chain) { group in groupID = group.id }
             }
-            .onAppear(perform: populate)
+            .sheet(isPresented: $showingNewSharedGroup) {
+                NewSharedGroupSheet(session: session) { group in groupID = group.id }
+            }
+            .onAppear {
+                populate()
+                if existing == nil { nameFocused = true }
+            }
             // Half a typed seed phrase is real work; one stray swipe must not
             // discard it silently. Dismissing with edits pending asks first.
             .interactiveDismissDisabled(hasUnsavedChanges)
@@ -268,13 +310,6 @@ struct EntryEditView: View {
 
     private func appendTag(_ tag: String) {
         tagsText = (enteredTags + [tag]).joined(separator: ", ")
-    }
-
-    private func createGroup() {
-        let name = newGroupName.trimmingCharacters(in: .whitespaces)
-        newGroupName = ""
-        guard !name.isEmpty else { return }
-        groupID = session.addGroup(name: name, chain: chain, colorHex: nil).id
     }
 
     private func populate() {
