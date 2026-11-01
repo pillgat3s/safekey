@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudKit
 import SafeKeyCore
 
 /// Refuses third-party keyboard extensions for the whole app, the way Apple's
@@ -15,6 +16,26 @@ final class KeyboardPolicyDelegate: NSObject, UIApplicationDelegate {
         shouldAllowExtensionPointIdentifier identifier: UIApplication.ExtensionPointIdentifier
     ) -> Bool {
         identifier != .keyboard
+    }
+
+    /// An accepted shared-group invitation arrives at the scene, so the scene
+    /// needs a delegate of ours to receive it.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = SceneDelegate.self
+        return configuration
+    }
+}
+
+/// Receives the invitation the user just tapped. Nothing else: SwiftUI runs
+/// the scene.
+final class SceneDelegate: NSObject, UIWindowSceneDelegate {
+    func windowScene(_ windowScene: UIWindowScene, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
+        CloudShareInbox.shared.accept(metadata)
     }
 }
 
@@ -54,6 +75,19 @@ struct SafeKeyApp: App {
                 }
             }
             .animation(.easeOut(duration: 0.15), value: scenePhase)
+            // An invitation that could not be accepted says so, rather than
+            // leaving the person waiting for a group that never arrives.
+            .alert(
+                "Couldn't Join the Shared Group",
+                isPresented: Binding(
+                    get: { model.shareAcceptanceError != nil },
+                    set: { if !$0 { model.shareAcceptanceError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(model.shareAcceptanceError ?? "")
+            }
             .onChange(of: scenePhase) { _, phase in
                 // Leaving the foreground on a phone is the equivalent of
                 // walking away from a desk.

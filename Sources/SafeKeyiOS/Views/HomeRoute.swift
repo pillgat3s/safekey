@@ -35,6 +35,7 @@ extension EntryFilter {
         case .privateKeys: "Private Keys"
         case .chain(let chain): chain.displayName
         case .group(let id): session.group(id: id)?.name ?? "Group"
+        case .ownWallets: "My Wallets"
         }
     }
 }
@@ -106,6 +107,7 @@ extension VaultSplitView.Selection {
         case .privateKeys: self = .tile(.privateKeys)
         case .chain(let chain): self = .chain(chain)
         case .group(let id): self = .group(id)
+        case .ownWallets: self = .myWallets
         }
     }
 
@@ -118,6 +120,7 @@ extension VaultSplitView.Selection {
         case .tile(.privateKeys): .privateKeys
         case .chain(let chain): .chain(chain)
         case .group(let id): .group(id)
+        case .myWallets: .ownWallets
         }
     }
 }

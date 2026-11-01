@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a0a0c">
   <title>Privacy Policy — SafeKey</title>
-  <meta name="description" content="SafeKey collects nothing. What the app stores on your device, how it is encrypted, and the two optional features that use your own iCloud.">
+  <meta name="description" content="SafeKey collects nothing. What the app stores on your device, how it is encrypted, and the optional features that use your own iCloud.">
   <link rel="canonical" href="https://safekey.tws.sh/privacy">
   <link rel="icon" type="image/png" href="assets/icon-512.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
@@ -31,11 +31,11 @@
     <p class="eyebrow">Privacy Policy</p>
     <h1>We never see <span class="serif">your data.</span></h1>
     <p class="meta">
-      <b>Effective:</b> 20 October 2026<br>
+      <b>Effective:</b> 1 November 2026<br>
       <b>Applies to:</b> SafeKey for iPhone, iPad and Mac<br>
       <b>Developer:</b> Thomann Web Solutions — <a href="mailto:help@tws.sh">help@tws.sh</a>
     </p>
-    <p class="intro">SafeKey is built so that we never see your data. This policy describes what the app stores on your device, where that data lives, and the two optional features that use your own iCloud. It is written from the code, not from a template, and the code is <a href="https://github.com/pillgat3s/safekey" rel="noopener">public</a>, so you can check it.</p>
+    <p class="intro">SafeKey is built so that we never see your data. This policy describes what the app stores on your device, where that data lives, and the optional features that use your own iCloud. It is written from the code, not from a template, and the code is <a href="https://github.com/pillgat3s/safekey" rel="noopener">public</a>, so you can check it.</p>
 
     <h2>1. We collect nothing</h2>
     <p>SafeKey has no account system, no server of ours, and no analytics, advertising or crash-reporting library. The app contains no third-party code and makes no network connection of its own. We do not receive your wallet names, secrets, addresses, notes, tags, settings, usage data, device identifiers or IP address, because nothing in the app sends them.</p>
@@ -53,9 +53,10 @@
     <p>On iPhone and iPad these files are additionally protected by iOS data protection, so they are unreadable while the device is locked.</p>
 
     <h2>3. iCloud (optional, off by default)</h2>
-    <p>Two features use your own iCloud account. Neither sends anything to us.</p>
+    <p>Three features use your own iCloud account. None of them sends anything to us.</p>
     <ul>
       <li><strong>Sync with iCloud</strong> keeps the vault in step across your devices through Apple's CloudKit, in the private database of your iCloud account. Only encrypted wallet data and the vault's unencrypted header (described above) are uploaded. Apple can see how many wallets you have and when they changed. Apple cannot read them, and we have no access to your private CloudKit database.</li>
+      <li><strong>Shared groups</strong> let you share chosen wallets with people you invite. A group's wallets are encrypted with a key made for that group — never your vault's key — and stored in a CloudKit zone in the owner's iCloud account that is shared with the people in the group. The group key is stored in a CloudKit field that Apple encrypts end to end for the people the zone is shared with. The group's name is visible to Apple and is shown on the invitation. Invitations go through Apple's sharing sheet, which may use the recipient's email address or phone number to deliver them; we never see any of it. Everyone in a group can read and change its wallets, so share only with people you trust.</li>
       <li><strong>Backups:</strong> iCloud Backup of your iPhone includes the encrypted vault file unless you turn that off in SafeKey's settings. On the Mac, "Keep an encrypted copy in iCloud Drive" places the same encrypted file in your iCloud Drive. Backups you export yourself are the same encrypted file.</li>
     </ul>
     <p>Apple's handling of iCloud data is governed by <a href="https://www.apple.com/legal/privacy/" rel="noopener">Apple's privacy policy</a>.</p>
@@ -66,6 +67,7 @@
     <h2>5. Your choices</h2>
     <ul>
       <li>Turn iCloud sync off at any time; "Stop Syncing and Remove Copy" also deletes the iCloud copy.</li>
+      <li>Leave a shared group, or delete one you own, at any time. Deleting a group removes its wallets from everyone else's devices; leaving removes them from yours.</li>
       <li>Exclude the vault from iCloud Backup in Settings.</li>
       <li>Delete the app to delete everything it stored on the device. Self-destruct, if armed, erases the vault after the number of wrong passwords you chose.</li>
     </ul>

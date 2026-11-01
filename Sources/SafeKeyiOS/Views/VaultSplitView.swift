@@ -16,6 +16,8 @@ struct VaultSplitView: View {
         case tile(VaultSettings.HomeTile)
         case chain(Chain)
         case group(UUID)
+        /// Everything outside the shared groups.
+        case myWallets
     }
 
     @State private var selection: Selection?
@@ -31,9 +33,12 @@ struct VaultSplitView: View {
     @State private var showingAdd = false
     @State private var showingSettings = false
     @State private var showingNewGroup = false
+    @State private var showingNewSharedGroup = false
+    @State private var managingGroup: WalletGroup?
     @State private var renamingGroup: WalletGroup?
     @State private var renameText = ""
     @State private var deletingGroup: WalletGroup?
+    @State private var leavingGroup: WalletGroup?
 
     private var visibleTiles: [VaultSettings.HomeTile] {
         let settings = session.settings
@@ -43,6 +48,11 @@ struct VaultSplitView: View {
 
     private var orderedChains: [Chain] {
         VaultSettings.ordered(session.usedChains, by: session.settings.chainOrder)
+    }
+
+    /// Every group in the vault, so a disappearing one is noticed.
+    private var groupIDs: Set<UUID> {
+        Set(session.unlocked.payload.groups.map(\.id))
     }
 
     var body: some View {
@@ -66,6 +76,12 @@ struct VaultSplitView: View {
         .sheet(isPresented: $showingNewGroup) {
             NewGroupSheet(session: session)
         }
+        .sheet(isPresented: $showingNewSharedGroup) {
+            NewSharedGroupSheet(session: session)
+        }
+        .sheet(item: $managingGroup) { group in
+            SharedGroupManageView(session: session, groupID: group.id)
+        }
         .onChange(of: selection) { _, current in
             // A different list starts at its root; a wallet pushed over the
             // old one would otherwise stay up over the new.
@@ -73,9 +89,19 @@ struct VaultSplitView: View {
             model.resume.noteSplit(selection: current, path: [])
         }
         .onChange(of: detailPath) { _, current in model.resume.noteSplit(selection: selection, path: current) }
+        // A group can go while it is selected — deleted or left from its own
+        // Manage screen, or taken away by a sync — and the detail column
+        // would otherwise be left on a filter that matches nothing.
+        .onChange(of: groupIDs) { _, _ in
+            if case .group(let id) = selection, session.group(id: id) == nil {
+                selection = .tile(.all)
+            }
+            let valid = detailPath.validated(in: session)
+            if valid.count != detailPath.count { detailPath = valid }
+        }
         .modifier(BiometricOffer(
             session: session,
-            sheetsPresented: showingSettings || showingAdd || showingNewGroup
+            sheetsPresented: showingSettings || showingAdd || showingNewGroup || showingNewSharedGroup || managingGroup != nil
         ))
         .alert("Rename Group", isPresented: renameBinding) {
             TextField("Group name", text: $renameText)
@@ -87,7 +113,7 @@ struct VaultSplitView: View {
             isPresented: deleteBinding,
             titleVisibility: .visible
         ) {
-            Button("Delete", role: .destructive) {
+            Button(deletingGroup.map { session.isShared($0.id) } == true ? "Delete Group" : "Delete", role: .destructive) {
                 if let group = deletingGroup {
                     // Leaving a deleted group selected would strand the detail
                     // column on a filter that matches nothing.
@@ -97,7 +123,26 @@ struct VaultSplitView: View {
                 deletingGroup = nil
             }
         } message: {
-            Text("The wallets in it are kept — they just stop belonging to a group.")
+            if deletingGroup.map({ session.isShared($0.id) }) == true {
+                Text("Its wallets stay in your vault, under My Wallets. Everyone else in the group loses them.")
+            } else {
+                Text("The wallets in it are kept — they just stop belonging to a group.")
+            }
+        }
+        .confirmationDialog(
+            "Leave “\(leavingGroup?.name ?? "")”?",
+            isPresented: Binding(get: { leavingGroup != nil }, set: { if !$0 { leavingGroup = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Leave Group", role: .destructive) {
+                if let group = leavingGroup {
+                    if selection == .group(group.id) { selection = .tile(.all) }
+                    session.leaveSharedGroup(id: group.id)
+                }
+                leavingGroup = nil
+            }
+        } message: {
+            Text("The group's wallets are removed from this device. You will need a new invitation to rejoin.")
         }
     }
 
@@ -116,6 +161,28 @@ struct VaultSplitView: View {
                     }
                     .badge(info.count)
                     .tag(Selection.tile(tile))
+                }
+            }
+
+            if !session.sharedGroups.isEmpty {
+                Section("Shared Groups") {
+                    Label {
+                        Text("My Wallets")
+                    } icon: {
+                        SharedGroupMark(size: 26, own: true)
+                    }
+                    .badge(session.ownEntries.count)
+                    .tag(Selection.myWallets)
+                    ForEach(session.sharedGroups) { group in
+                        Label {
+                            Text(group.name)
+                        } icon: {
+                            SharedGroupMark(size: 26)
+                        }
+                        .badge(session.entries.filter { $0.groupID == group.id }.count)
+                        .tag(Selection.group(group.id))
+                        .contextMenu { sharedGroupMenu(group) }
+                    }
                 }
             }
 
@@ -174,9 +241,45 @@ struct VaultSplitView: View {
             }
             ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
-                Button { showingAdd = true } label: {
-                    Label("Add Wallet", systemImage: "plus")
-                }
+                addMenu
+            }
+        }
+    }
+
+    /// New wallet or new shared group, under one plus — where the Passwords
+    /// app keeps both.
+    private var addMenu: some View {
+        Menu {
+            Button { showingAdd = true } label: {
+                Label("New Wallet", systemImage: "key.fill")
+            }
+            Button { showingNewSharedGroup = true } label: {
+                Label("New Shared Group", systemImage: "person.2.fill")
+            }
+        } label: {
+            Label("Add", systemImage: "plus")
+        }
+        .accessibilityIdentifier("home.add")
+    }
+
+    @ViewBuilder
+    private func sharedGroupMenu(_ group: WalletGroup) -> some View {
+        Button {
+            managingGroup = group
+        } label: {
+            Label("Manage", systemImage: "person.2")
+        }
+        if session.membership(for: group.id)?.isOwner == true {
+            Button(role: .destructive) {
+                deletingGroup = group
+            } label: {
+                Label("Delete Group", systemImage: "trash")
+            }
+        } else {
+            Button(role: .destructive) {
+                leavingGroup = group
+            } label: {
+                Label("Leave Group", systemImage: "rectangle.portrait.and.arrow.right")
             }
         }
     }
@@ -241,6 +344,7 @@ struct VaultSplitView: View {
         case .tile(.privateKeys): .privateKeys
         case .chain(let chain): .chain(chain)
         case .group(let id): session.group(id: id) == nil ? nil : .group(id)
+        case .myWallets: .ownWallets
         }
     }
 
@@ -249,6 +353,7 @@ struct VaultSplitView: View {
         case .tile(let tile): tileInfo(tile).title
         case .chain(let chain): chain.displayName
         case .group(let id): session.group(id: id)?.name ?? ""
+        case .myWallets: "My Wallets"
         }
     }
 

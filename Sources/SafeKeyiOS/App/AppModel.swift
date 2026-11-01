@@ -70,12 +70,40 @@ final class AppModel {
     let biometricFactor: BiometricFactor
     /// Sync only ever runs while unlocked — merging needs the data key.
     let sync: SyncCoordinator
+    /// The CloudKit side of shared groups, for the invitation and member
+    /// sheets. Nil when the app runs against the in-process stand-in.
+    let cloudSharing: CloudKitSharedGroupService?
+    /// An invitation that could not be accepted, for an alert.
+    var shareAcceptanceError: String?
 
-    init(store: VaultStore = VaultStore(), keychain: KeychainService = KeychainService()) {
+    init(
+        store: VaultStore = VaultStore(),
+        keychain: KeychainService = KeychainService(),
+        syncEnvironment: SyncCoordinator.Environment = .cloudKit
+    ) {
         self.store = store
         self.keychain = keychain
         self.biometricFactor = BiometricFactor(service: keychain.service)
-        self.sync = SyncCoordinator(store: store)
+        self.sync = SyncCoordinator(store: store, environment: syncEnvironment)
+        self.cloudSharing = syncEnvironment.sharing as? CloudKitSharedGroupService
+        observeInvitations()
+    }
+
+    /// An invitation accepted while the vault is open syncs at once; a locked
+    /// vault picks the group up at its next unlock.
+    private func observeInvitations() {
+        NotificationCenter.default.addObserver(forName: CloudShareInbox.accepted, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let session = self.session else { return }
+                Task { await self.sync.syncIfEnabled(session: session) }
+            }
+        }
+        NotificationCenter.default.addObserver(forName: CloudShareInbox.failed, object: nil, queue: .main) { [weak self] note in
+            let message = note.userInfo?["message"] as? String ?? "The invitation could not be accepted."
+            MainActor.assumeIsolated {
+                self?.shareAcceptanceError = message
+            }
+        }
     }
 
     /// The model the app scene should use.
@@ -97,8 +125,12 @@ final class AppModel {
             try? FileManager.default.removeItem(at: directory)
             try? keychain.deleteAll()
             UserDefaults.standard.removeObject(forKey: ScopeReminder.dismissedKey)
+            UserDefaults.standard.removeObject(forKey: SyncCoordinator.discoveryPendingKey)
         }
-        return AppModel(store: VaultStore(directory: directory), keychain: keychain)
+        // `--uitest-fakecloud` swaps CloudKit for an in-process stand-in, so
+        // the shared-group flow can be driven with no Apple ID.
+        let environment: SyncCoordinator.Environment = arguments.contains("--uitest-fakecloud") ? .uiTestFake() : .cloudKit
+        return AppModel(store: VaultStore(directory: directory), keychain: keychain, syncEnvironment: environment)
         #else
         return AppModel()
         #endif

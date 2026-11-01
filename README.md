@@ -49,6 +49,7 @@ opens on the other.
 | **Clipboard** | Copied secrets are marked concealed and auto-cleared, but only if you haven't copied something newer |
 | **Keyboard** | iOS refuses third-party keyboard extensions app-wide — a custom keyboard is someone else's code seeing every keystroke, so only Apple's keyboard ever gets one. Same policy as Apple's Passwords app |
 | **iCloud sync** | Off by default. Each wallet is sealed under the vault's data key *before* it is uploaded, so iCloud holds an opaque blob, a date and a vault id — never a name, a chain, or a secret |
+| **Shared groups** | A group's wallets are sealed under a key made for that group, never the vault's, so sharing a group shares nothing else. The group key travels to members in a CloudKit field that is end-to-end encrypted with keys from their iCloud Keychains — Apple's servers hold it only in encrypted form. The group's name is the one thing in the open: it is on the invitation |
 | **Logs** | `WalletEntry.debugDescription` is redacted; state restoration and sudden termination are disabled so no window snapshot ever hits disk |
 
 ### Audit
@@ -145,6 +146,38 @@ instead of shuttling a file around. A device never publishes its header over a
 carries, so replacing it would strand them permanently. Instead the app says
 the account holds another vault and offers to merge the two, adopt that one, or
 replace it.
+
+### Shared groups
+
+The same arrangement the Passwords app uses: make a shared group, invite
+people, move wallets in. Everyone in the group can see, edit and move its
+wallets; only the owner adds or removes people, renames the group, or deletes
+it. A wallet belongs to one place at a time — your own vault or one group — so
+moving it into a group takes it out of your private records, and moving it out
+again removes it for everyone.
+
+Each group is its own CloudKit zone in the owner's private database, shared as
+a whole. The zone holds the group's wallets and the group record sealed under a
+256-bit key made for that group, plus a root record carrying that key in a
+[CloudKit encrypted field](https://developer.apple.com/documentation/cloudkit/ckrecord/encryptedvalues),
+which Apple encrypts end to end with keys from the participants' iCloud
+Keychains. The vault's own data key is never shared: a member can open the
+group's wallets and nothing else of yours. Members reach the zone through their
+shared database and sync it with the same engine, under the group key instead
+of the vault's, so conflicts in a group are handled the way they are in the
+vault — both versions kept.
+
+A device finds the groups it belongs to by listing the zones in its account —
+the ones it owns in the private database, the ones it accepted in the shared
+one — and a zone that is gone means the owner deleted the group or removed this
+account from it. The owner keeps the wallets of a deleted group, back in the
+vault's own part; a member loses them. Shared groups sync whether or not the
+vault's own iCloud sync is on: the people in a group are waiting on it, and its
+zone is not the vault's copy.
+
+The invitation and the member list are Apple's sharing sheet, which is the only
+thing that can hand an invitation to another iCloud account. Accepting one
+opens the app, which joins the zone and picks the group up on its next sync.
 
 ## Disguise
 

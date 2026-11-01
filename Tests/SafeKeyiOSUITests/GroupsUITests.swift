@@ -94,7 +94,7 @@ final class GroupsUITests: XCTestCase {
     }
 
     private func addWallet(name: String) {
-        app.buttons["Add Wallet"].tap()
+        app.tapAddWallet()
         XCTAssertTrue(app.navigationBars["New Wallet"].waitForExistence(timeout: timeout))
 
         let nameField = app.textFields["entry.name"]

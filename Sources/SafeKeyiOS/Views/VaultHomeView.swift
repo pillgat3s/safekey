@@ -36,10 +36,13 @@ struct VaultHomeView: View {
     @State private var showingAdd = false
     @State private var showingSettings = false
     @State private var showingNewGroup = false
+    @State private var showingNewSharedGroup = false
+    @State private var managingGroup: WalletGroup?
     @State private var dragging: VaultSettings.HomeTile?
     @State private var renamingGroup: WalletGroup?
     @State private var renameText = ""
     @State private var deletingGroup: WalletGroup?
+    @State private var leavingGroup: WalletGroup?
     // Device-local view state rather than vault data: which sections you have
     // folded away is not worth carrying inside an encrypted backup.
     @AppStorage("home.chainsExpanded") private var chainsExpanded = true
@@ -141,6 +144,11 @@ struct VaultHomeView: View {
         VaultSettings.ordered(session.usedChains, by: session.settings.chainOrder)
     }
 
+    /// Every group in the vault, so a disappearing one is noticed.
+    private var groupIDs: Set<UUID> {
+        Set(session.unlocked.payload.groups.map(\.id))
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
@@ -188,6 +196,59 @@ struct VaultHomeView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
+
+                // Shared groups sit right under the tiles, with "My Wallets"
+                // for everything that is not shared — the arrangement the
+                // Passwords app uses once there is a shared group.
+                if !session.sharedGroups.isEmpty {
+                    sectionHeader("Shared Groups")
+                    VStack(spacing: 0) {
+                        NavigationLink(value: HomeRoute.list(.ownWallets)) {
+                            RowLabel(title: "My Wallets", count: session.ownEntries.count) {
+                                SharedGroupMark(size: 26, own: true)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("home.myWallets")
+                        rowDivider
+                        ForEach(Array(session.sharedGroups.enumerated()), id: \.element) { index, group in
+                            NavigationLink(value: HomeRoute.list(.group(group.id))) {
+                                RowLabel(
+                                    title: group.name,
+                                    subtitle: session.membership(for: group.id)?.isOwner == true ? "Owner" : "Shared with you",
+                                    count: session.entries.filter { $0.groupID == group.id }.count
+                                ) {
+                                    SharedGroupMark(size: 26)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("home.sharedGroup.\(group.name)")
+                            .contextMenu {
+                                Button {
+                                    managingGroup = group
+                                } label: {
+                                    Label("Manage", systemImage: "person.2")
+                                }
+                                if session.membership(for: group.id)?.isOwner == true {
+                                    Button(role: .destructive) {
+                                        deletingGroup = group
+                                    } label: {
+                                        Label("Delete Group", systemImage: "trash")
+                                    }
+                                } else {
+                                    Button(role: .destructive) {
+                                        leavingGroup = group
+                                    } label: {
+                                        Label("Leave Group", systemImage: "rectangle.portrait.and.arrow.right")
+                                    }
+                                }
+                            }
+                            if index < session.sharedGroups.count - 1 { rowDivider }
+                        }
+                    }
+                    .background(.background.secondary, in: .rect(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 16)
+                }
 
                 if !orderedChains.isEmpty {
                     collapsibleHeader("Chains", isExpanded: $chainsExpanded)
@@ -292,10 +353,20 @@ struct VaultHomeView: View {
                 ToolbarSpacer(.fixed, placement: .bottomBar)
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarSpacer(.fixed, placement: .bottomBar)
+                // New wallet or new shared group, under one plus — where the
+                // Passwords app keeps both.
                 ToolbarItem(placement: .bottomBar) {
-                    Button { showingAdd = true } label: {
-                        Label("Add Wallet", systemImage: "plus")
+                    Menu {
+                        Button { showingAdd = true } label: {
+                            Label("New Wallet", systemImage: "key.fill")
+                        }
+                        Button { showingNewSharedGroup = true } label: {
+                            Label("New Shared Group", systemImage: "person.2.fill")
+                        }
+                    } label: {
+                        Label("Add", systemImage: "plus")
                     }
+                    .accessibilityIdentifier("home.add")
                 }
             }
             .sheet(isPresented: $showingAdd) {
@@ -307,11 +378,24 @@ struct VaultHomeView: View {
             .sheet(isPresented: $showingNewGroup) {
                 NewGroupSheet(session: session)
             }
+            .sheet(isPresented: $showingNewSharedGroup) {
+                NewSharedGroupSheet(session: session)
+            }
+            .sheet(item: $managingGroup) { group in
+                SharedGroupManageView(session: session, groupID: group.id)
+            }
             .modifier(BiometricOffer(
                 session: session,
-                sheetsPresented: showingSettings || showingAdd || showingNewGroup
+                sheetsPresented: showingSettings || showingAdd || showingNewGroup || showingNewSharedGroup || managingGroup != nil
             ))
             .onChange(of: path) { _, current in model.resume.noteHome(current) }
+            // A group can go while its list is up — deleted or left from its
+            // own Manage screen, or taken away by a sync. The list behind the
+            // sheet would otherwise sit there showing nothing.
+            .onChange(of: groupIDs) { _, _ in
+                let valid = path.validated(in: session)
+                if valid.count != path.count { path = valid }
+            }
             .onAppear { UnlockTrace.mark("home-appeared") }
             .alert("Rename Group", isPresented: renameBinding) {
                 TextField("Group name", text: $renameText)
@@ -323,12 +407,28 @@ struct VaultHomeView: View {
                 isPresented: deleteBinding,
                 titleVisibility: .visible
             ) {
-                Button("Delete", role: .destructive) {
+                Button(deletingGroup.map { session.isShared($0.id) } == true ? "Delete Group" : "Delete", role: .destructive) {
                     if let group = deletingGroup { session.deleteGroup(id: group.id) }
                     deletingGroup = nil
                 }
             } message: {
-                Text("The wallets in it are kept — they just stop belonging to a group.")
+                if deletingGroup.map({ session.isShared($0.id) }) == true {
+                    Text("Its wallets stay in your vault, under My Wallets. Everyone else in the group loses them.")
+                } else {
+                    Text("The wallets in it are kept — they just stop belonging to a group.")
+                }
+            }
+            .confirmationDialog(
+                "Leave “\(leavingGroup?.name ?? "")”?",
+                isPresented: Binding(get: { leavingGroup != nil }, set: { if !$0 { leavingGroup = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Leave Group", role: .destructive) {
+                    if let group = leavingGroup { session.leaveSharedGroup(id: group.id) }
+                    leavingGroup = nil
+                }
+            } message: {
+                Text("The group's wallets are removed from this device. You will need a new invitation to rejoin.")
             }
         }
     }
@@ -371,6 +471,21 @@ struct VaultHomeView: View {
             }
             .padding(.top, 4)
         }
+    }
+
+    /// A section title that does not fold: the shared groups are few and
+    /// always worth seeing.
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 20)
+        .padding(.top, 22)
+        .padding(.bottom, 6)
+        .accessibilityIdentifier("home.section.\(title)")
     }
 
     /// Section title with a disclosure chevron beside it.

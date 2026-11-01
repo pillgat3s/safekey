@@ -209,11 +209,20 @@ struct EntryEditView: View {
                         ForEach(session.groups(for: chain)) { group in
                             Text(group.name).tag(UUID?.some(group.id))
                         }
+                        // Shared groups take any chain; a wallet in one is
+                        // shared with everyone in it.
+                        if !session.sharedGroups.isEmpty {
+                            Section("Shared Groups") {
+                                ForEach(session.sharedGroups) { group in
+                                    Text(group.name).tag(UUID?.some(group.id))
+                                }
+                            }
+                        }
                     }
-                    .disabled(session.groups(for: chain).isEmpty)
+                    .disabled(session.groups(for: chain).isEmpty && session.sharedGroups.isEmpty)
                     Toggle("Favorite", isOn: $favorite)
                 } footer: {
-                    if session.groups(for: chain).isEmpty {
+                    if session.groups(for: chain).isEmpty && session.sharedGroups.isEmpty {
                         Text("No groups in \(chain.displayName) yet — right-click the chain in the sidebar to add one.")
                     }
                 }
@@ -289,8 +298,9 @@ struct EntryEditView: View {
             ChainPickerView(selection: $chain)
         }
         .onChange(of: chain) { _, newChain in
-            // Switching chains invalidates a group from the previous one.
-            if let groupID, session.group(id: groupID)?.chain != newChain {
+            // Switching chains invalidates a group from the previous one. A
+            // shared group spans chains and stays.
+            if let groupID, !session.isShared(groupID), session.group(id: groupID)?.chain != newChain {
                 self.groupID = nil
             }
         }

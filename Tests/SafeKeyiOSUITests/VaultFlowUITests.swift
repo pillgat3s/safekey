@@ -93,7 +93,7 @@ final class VaultFlowUITests: XCTestCase {
     }
 
     private func addEntry(name: String, secret: String, seedPhrase: Bool = false) {
-        app.buttons["Add Wallet"].tap()
+        app.tapAddWallet()
         XCTAssertTrue(app.navigationBars["New Wallet"].waitForExistence(timeout: timeout))
 
         let nameField = app.textFields["entry.name"]
@@ -172,14 +172,14 @@ final class VaultFlowUITests: XCTestCase {
         launch()
         createVault()
 
-        app.buttons["Add Wallet"].tap()
+        app.tapAddWallet()
         let reminder = app.staticTexts["entry.scopeReminder"]
         XCTAssertTrue(reminder.waitForExistence(timeout: timeout), "the reminder should show when adding a wallet")
         app.buttons["entry.scopeReminder.dismiss"].tap()
         XCTAssertFalse(reminder.waitForExistence(timeout: 2), "the reminder should leave at once")
         app.buttons["Cancel"].firstMatch.tap()
 
-        app.buttons["Add Wallet"].tap()
+        app.tapAddWallet()
         XCTAssertTrue(app.textFields["entry.name"].waitForExistence(timeout: timeout))
         XCTAssertFalse(reminder.exists, "once dismissed, the reminder stays away")
         app.buttons["Cancel"].firstMatch.tap()
@@ -188,8 +188,7 @@ final class VaultFlowUITests: XCTestCase {
         app.terminate()
         launch(reset: false)
         type(masterPassword + "\n", into: lockPasswordField)
-        XCTAssertTrue(app.buttons["Add Wallet"].waitForExistence(timeout: timeout))
-        app.buttons["Add Wallet"].tap()
+        app.tapAddWallet()
         XCTAssertTrue(app.textFields["entry.name"].waitForExistence(timeout: timeout))
         XCTAssertFalse(reminder.exists, "the dismissal must survive a relaunch")
     }

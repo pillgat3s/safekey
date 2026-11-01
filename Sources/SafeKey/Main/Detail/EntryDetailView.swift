@@ -62,6 +62,13 @@ struct EntryDetailView: View {
                     ForEach(session.groups(for: entry.chain)) { group in
                         Text(group.name).tag(UUID?.some(group.id))
                     }
+                    if !session.sharedGroups.isEmpty {
+                        Section("Shared Groups") {
+                            ForEach(session.sharedGroups) { group in
+                                Text(group.name).tag(UUID?.some(group.id))
+                            }
+                        }
+                    }
                 }
 
                 Button("New Group…") {

@@ -8,8 +8,13 @@ enum EntryFilter: Hashable {
     case all, favorites, seedPhrases, privateKeys
     case chain(Chain)
     case group(UUID)
+    /// Everything outside the shared groups — "My Wallets", once there is a
+    /// shared group to tell them apart from.
+    case ownWallets
 
-    func matches(_ entry: WalletEntry) -> Bool {
+    /// `sharedGroups` is needed for `.ownWallets`: whether a wallet is one's
+    /// own depends on which groups are shared, which the entry cannot know.
+    func matches(_ entry: WalletEntry, sharedGroups: Set<UUID> = []) -> Bool {
         switch self {
         case .all: true
         case .favorites: entry.favorite
@@ -17,6 +22,7 @@ enum EntryFilter: Hashable {
         case .privateKeys: !entry.kind.isSeedPhrase
         case .chain(let chain): entry.chain == chain
         case .group(let id): entry.groupID == id
+        case .ownWallets: entry.groupID.map { !sharedGroups.contains($0) } ?? true
         }
     }
 }
@@ -75,9 +81,25 @@ struct EntryListView: View {
 
     @State private var searchText = ""
     @State private var entryPendingDeletion: WalletEntry?
+    @State private var showingManage = false
+
+    /// The shared group this list shows, if it shows one.
+    private var sharedGroupID: UUID? {
+        if case .group(let id) = filter, session.isShared(id) { return id }
+        return nil
+    }
+
+    /// A group's name is read live rather than taken from `title`, which was
+    /// fixed when the list was pushed: renaming the group from its own
+    /// Manage screen has to show on the list behind it.
+    private var displayTitle: String {
+        if case .group(let id) = filter, let group = session.group(id: id) { return group.name }
+        return title
+    }
 
     private var filtered: [WalletEntry] {
-        var entries = session.entries.filter { filter.matches($0) }
+        let shared = Set(session.memberships.map(\.id))
+        var entries = session.entries.filter { filter.matches($0, sharedGroups: shared) }
         if !searchText.isEmpty {
             entries = entries.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText)
@@ -122,6 +144,14 @@ struct EntryListView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // A shared group is managed from its own list, where the
+            // Passwords app puts the same button.
+            if sharedGroupID != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Manage") { showingManage = true }
+                        .accessibilityIdentifier("group.manage")
+                }
+            }
             // Title with the item count beneath it, the way a credential list
             // tells you how much is in the category you opened.
             ToolbarItem(placement: .topBarTrailing) {
@@ -129,7 +159,7 @@ struct EntryListView: View {
             }
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
-                    Text(title)
+                    Text(displayTitle)
                         .font(.headline)
                     Text("\(filtered.count) \(filtered.count == 1 ? "Item" : "Items")")
                         .font(.caption)
@@ -139,6 +169,11 @@ struct EntryListView: View {
         }
         .searchable(text: $searchText, prompt: "Search")
         .onAppear { if searchText.isEmpty { searchText = initialSearch } }
+        .sheet(isPresented: $showingManage) {
+            if let sharedGroupID {
+                SharedGroupManageView(session: session, groupID: sharedGroupID)
+            }
+        }
         .confirmationDialog(
             "Delete “\(entryPendingDeletion?.name ?? "")”?",
             isPresented: Binding(
@@ -152,12 +187,17 @@ struct EntryListView: View {
                 entryPendingDeletion = nil
             }
         } message: {
-            Text(
-                session.settings.cloudSyncEnabled
-                    ? "This removes the secret from this iPhone, from iCloud, and from your other devices. There is no undo."
-                    : "This removes the secret from the vault permanently. There is no undo."
-            )
+            Text(deletionMessage)
         }
+    }
+
+    private var deletionMessage: String {
+        if session.isShared(entryPendingDeletion?.groupID) {
+            return "This removes the secret for everyone in the group, from every device. There is no undo."
+        }
+        return session.settings.cloudSyncEnabled
+            ? "This removes the secret from this iPhone, from iCloud, and from your other devices. There is no undo."
+            : "This removes the secret from the vault permanently. There is no undo."
     }
 
     private func row(for entry: WalletEntry) -> some View {

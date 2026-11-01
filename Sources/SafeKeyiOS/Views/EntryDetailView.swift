@@ -130,6 +130,15 @@ struct EntryDetailView: View {
                                 ForEach(session.groups(for: entry.chain)) { group in
                                     Text(group.name).tag(UUID?.some(group.id))
                                 }
+                                // Shared groups take any chain; moving in
+                                // shares the wallet with everyone in them.
+                                if !session.sharedGroups.isEmpty {
+                                    Section("Shared Groups") {
+                                        ForEach(session.sharedGroups) { group in
+                                            Label(group.name, systemImage: "person.2").tag(UUID?.some(group.id))
+                                        }
+                                    }
+                                }
                             }
                             Divider()
                             Button {

@@ -36,6 +36,19 @@ struct RootView: View {
                     .frame(minWidth: 900, minHeight: 560)
             }
         }
+        // An invitation that could not be accepted says so, rather than
+        // leaving the person waiting for a group that never arrives.
+        .alert(
+            "Couldn't Join the Shared Group",
+            isPresented: Binding(
+                get: { model.shareAcceptanceError != nil },
+                set: { if !$0 { model.shareAcceptanceError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.shareAcceptanceError ?? "")
+        }
         // The lock screen shows no secrets, and excluding a window from screen
         // capture appears to stop the system attaching the biometric prompt to
         // it. Past the lock screen the user's own setting decides — on unless

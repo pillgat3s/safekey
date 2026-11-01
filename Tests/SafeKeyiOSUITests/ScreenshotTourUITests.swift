@@ -169,7 +169,7 @@ final class ScreenshotTourUITests: XCTestCase {
     }
 
     private func addEntry(name: String, secret: String, seedPhrase: Bool = false) {
-        app.buttons["Add Wallet"].tap()
+        app.tapAddWallet()
         XCTAssertTrue(app.navigationBars["New Wallet"].waitForExistence(timeout: timeout))
 
         let nameField = app.textFields["entry.name"]

@@ -30,6 +30,9 @@ struct SidebarView: View {
     @State private var groupPendingDeletion: WalletGroup?
     /// Non-nil while the new-group sheet is up, carrying the chain it is for.
     @State private var newGroupChain: Chain?
+    @State private var showingNewSharedGroup = false
+    @State private var sharedGroupBeingManaged: WalletGroup?
+    @State private var sharedGroupPendingLeave: WalletGroup?
 
     private func count(_ item: SidebarItem) -> Int {
         session.entries.filter { item.matches($0) }.count
@@ -155,6 +158,32 @@ struct SidebarView: View {
                 .listRowSeparator(.hidden)
             }
 
+            if !session.sharedGroups.isEmpty {
+                Section("Shared Groups") {
+                    ForEach(session.sharedGroups) { group in
+                        Label {
+                            Text(group.name)
+                        } icon: {
+                            SharedGroupMark(size: 18)
+                        }
+                        .badge(count(.group(group.id)))
+                        .tag(SidebarItem.group(group.id))
+                        .contextMenu {
+                            Button("Manage…") { sharedGroupBeingManaged = group }
+                            if session.membership(for: group.id)?.isOwner == true {
+                                Button("Delete Group…", role: .destructive) {
+                                    groupPendingDeletion = group
+                                }
+                            } else {
+                                Button("Leave Group…", role: .destructive) {
+                                    sharedGroupPendingLeave = group
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if !session.usedChains.isEmpty {
                 Section(isExpanded: $chainsExpanded) {
                     // Groups live under the chain they organise, indented, so
@@ -237,6 +266,16 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
                 .help("New group")
 
+                Button {
+                    showingNewSharedGroup = true
+                } label: {
+                    Label("New Shared Group", systemImage: "person.2.badge.plus")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                .help("New shared group")
+                .accessibilityLabel("New Shared Group")
+
                 Spacer(minLength: 0)
             }
             .foregroundStyle(.secondary)
@@ -249,6 +288,30 @@ struct SidebarView: View {
         .sheet(item: $groupBeingRenamed) { group in
             GroupEditorView(session: session, chain: group.chain, existing: group)
         }
+        .sheet(isPresented: $showingNewSharedGroup) {
+            NewSharedGroupView(session: session)
+        }
+        .sheet(item: $sharedGroupBeingManaged) { group in
+            SharedGroupManageView(session: session, groupID: group.id)
+        }
+        .confirmationDialog(
+            "Leave “\(sharedGroupPendingLeave?.name ?? "")”?",
+            isPresented: Binding(
+                get: { sharedGroupPendingLeave != nil },
+                set: { if !$0 { sharedGroupPendingLeave = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Leave Group", role: .destructive) {
+                if let group = sharedGroupPendingLeave {
+                    if selection == .group(group.id) { selection = .all }
+                    session.leaveSharedGroup(id: group.id)
+                }
+                sharedGroupPendingLeave = nil
+            }
+        } message: {
+            Text("The group's wallets are removed from this Mac. You will need a new invitation to rejoin.")
+        }
         .confirmationDialog(
             "Delete “\(groupPendingDeletion?.name ?? "")”?",
             isPresented: Binding(
@@ -259,13 +322,19 @@ struct SidebarView: View {
         ) {
             Button("Delete Group", role: .destructive) {
                 if let group = groupPendingDeletion {
-                    if selection == .group(group.id) { selection = .chain(group.chain) }
+                    if selection == .group(group.id) {
+                        selection = session.isShared(group.id) ? .all : .chain(group.chain)
+                    }
                     session.deleteGroup(id: group.id)
                 }
                 groupPendingDeletion = nil
             }
         } message: {
-            Text("The wallets in it are kept — they just stop belonging to a group.")
+            if groupPendingDeletion.map({ session.isShared($0.id) }) == true {
+                Text("Its wallets stay in your vault. Everyone else in the group loses them.")
+            } else {
+                Text("The wallets in it are kept — they just stop belonging to a group.")
+            }
         }
     }
 

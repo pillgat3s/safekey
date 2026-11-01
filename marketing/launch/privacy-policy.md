@@ -1,6 +1,6 @@
 # SafeKey Privacy Policy
 
-**Effective:** 20 October 2026
+**Effective:** 1 November 2026
 **Applies to:** SafeKey for iPhone, iPad and Mac
 **Developer:** Thomann Web Solutions — help@tws.sh
 
@@ -53,7 +53,8 @@ protection, so they are unreadable while the device is locked.
 
 ## 3. iCloud (optional, off by default)
 
-Two features use your own iCloud account. Neither sends anything to us.
+Three features use your own iCloud account. None of them sends anything to
+us.
 
 - **Sync with iCloud** keeps the vault in step across your devices through
   Apple's CloudKit, in the private database of your iCloud account. Only
@@ -61,6 +62,16 @@ Two features use your own iCloud account. Neither sends anything to us.
   above) are uploaded. Apple can see how many wallets you have and when
   they changed. Apple cannot read them, and we have no access to your
   private CloudKit database.
+- **Shared groups** let you share chosen wallets with people you invite.
+  A group's wallets are encrypted with a key made for that group — never
+  your vault's key — and stored in a CloudKit zone in the owner's iCloud
+  account that is shared with the people in the group. The group key is
+  stored in a CloudKit field that Apple encrypts end to end for the people
+  the zone is shared with. The group's name is visible to Apple and is
+  shown on the invitation. Invitations go through Apple's sharing sheet,
+  which may use the recipient's email address or phone number to deliver
+  them; we never see any of it. Everyone in a group can read and change
+  its wallets, so share only with people you trust.
 - **Backups**: iCloud Backup of your iPhone includes the encrypted vault
   file unless you turn that off in SafeKey's settings. On the Mac, "Keep an
   encrypted copy in iCloud Drive" places the same encrypted file in your
@@ -76,6 +87,9 @@ None. There is nothing to share.
 
 - Turn iCloud sync off at any time; "Stop Syncing and Remove Copy" also
   deletes the iCloud copy.
+- Leave a shared group, or delete one you own, at any time. Deleting a
+  group removes its wallets from everyone else's devices; leaving removes
+  them from yours.
 - Exclude the vault from iCloud Backup in Settings.
 - Delete the app to delete everything it stored on the device.
   Self-destruct, if armed, erases the vault after the number of wrong

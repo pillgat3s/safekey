@@ -76,13 +76,23 @@ struct EntryListView: View {
                                         Button(entry.favorite ? "Remove from Favorites" : "Add to Favorites") {
                                             session.toggleFavorite(id: entry.id)
                                         }
-                                        if !session.groups.isEmpty {
+                                        if !session.groups.isEmpty || !session.sharedGroups.isEmpty {
                                             Menu("Move to Group") {
                                                 ForEach(session.groups) { group in
                                                     Button(group.name) {
                                                         session.move(entryID: entry.id, toGroup: group.id)
                                                     }
                                                     .disabled(entry.groupID == group.id)
+                                                }
+                                                if !session.sharedGroups.isEmpty {
+                                                    Section("Shared Groups") {
+                                                        ForEach(session.sharedGroups) { group in
+                                                            Button(group.name) {
+                                                                session.move(entryID: entry.id, toGroup: group.id)
+                                                            }
+                                                            .disabled(entry.groupID == group.id)
+                                                        }
+                                                    }
                                                 }
                                                 Divider()
                                                 Button("Ungrouped") {
@@ -151,12 +161,17 @@ struct EntryListView: View {
                 entryPendingDeletion = nil
             }
         } message: {
-            Text(
-                session.settings.cloudSyncEnabled
-                    ? "This removes the secret from this Mac, from iCloud, and from your other devices. There is no undo."
-                    : "The secret is removed from the encrypted vault. There is no undo."
-            )
+            Text(deletionMessage)
         }
+    }
+
+    private var deletionMessage: String {
+        if session.isShared(entryPendingDeletion?.groupID) {
+            return "This removes the secret for everyone in the group, from every device. There is no undo."
+        }
+        return session.settings.cloudSyncEnabled
+            ? "This removes the secret from this Mac, from iCloud, and from your other devices. There is no undo."
+            : "The secret is removed from the encrypted vault. There is no undo."
     }
 
     private var sidebarIcon: String {

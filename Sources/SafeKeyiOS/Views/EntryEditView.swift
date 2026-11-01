@@ -96,6 +96,13 @@ struct EntryEditView: View {
                         ForEach(session.groups(for: chain)) { group in
                             Text(group.name).tag(UUID?.some(group.id))
                         }
+                        if !session.sharedGroups.isEmpty {
+                            Section("Shared Groups") {
+                                ForEach(session.sharedGroups) { group in
+                                    Label(group.name, systemImage: "person.2").tag(UUID?.some(group.id))
+                                }
+                            }
+                        }
                     }
                     Button("New Group…") {
                         newGroupName = ""
@@ -219,7 +226,10 @@ struct EntryEditView: View {
                 ChainPickerView(selection: $chain)
             }
             .onChange(of: chain) { _, newChain in
-                if let groupID, !session.groups(for: newChain).contains(where: { $0.id == groupID }) {
+                // A shared group spans chains and stays; a private group
+                // belongs to the old chain and must not linger.
+                if let groupID, !session.isShared(groupID),
+                   !session.groups(for: newChain).contains(where: { $0.id == groupID }) {
                     self.groupID = nil
                 }
             }

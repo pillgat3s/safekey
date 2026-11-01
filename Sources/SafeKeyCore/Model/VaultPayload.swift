@@ -7,17 +7,23 @@ public struct VaultPayload: Codable, Sendable, Equatable {
     public var entries: [WalletEntry]
     public var settings: VaultSettings
     public var groups: [WalletGroup]
+    /// The shared groups this device belongs to, with their keys. Local to the
+    /// vault: sync neither sends nor receives these, it discovers them from
+    /// the account instead. See ``SharedGroupMembership``.
+    public var sharedGroups: [SharedGroupMembership]
 
     public init(
         schemaVersion: Int = 1,
         entries: [WalletEntry] = [],
         settings: VaultSettings = VaultSettings(),
-        groups: [WalletGroup] = []
+        groups: [WalletGroup] = [],
+        sharedGroups: [SharedGroupMembership] = []
     ) {
         self.schemaVersion = schemaVersion
         self.entries = entries
         self.settings = settings
         self.groups = groups
+        self.sharedGroups = sharedGroups
     }
 
     /// Hand-written so that fields added after a vault was created decode as
@@ -29,5 +35,6 @@ public struct VaultPayload: Codable, Sendable, Equatable {
         entries = try container.decodeIfPresent([WalletEntry].self, forKey: .entries) ?? []
         settings = try container.decodeIfPresent(VaultSettings.self, forKey: .settings) ?? VaultSettings()
         groups = try container.decodeIfPresent([WalletGroup].self, forKey: .groups) ?? []
+        sharedGroups = try container.decodeIfPresent([SharedGroupMembership].self, forKey: .sharedGroups) ?? []
     }
 }

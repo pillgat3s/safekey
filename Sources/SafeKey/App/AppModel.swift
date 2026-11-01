@@ -23,11 +23,40 @@ final class AppModel {
     /// Header of the locked vault, for unlock-screen UI (KDF params, policies).
     private(set) var lockedHeader: VaultHeader?
 
-    init(store: VaultStore = VaultStore(), keychain: KeychainService = KeychainService()) {
+    init(
+        store: VaultStore = VaultStore(),
+        keychain: KeychainService = KeychainService(),
+        syncEnvironment: SyncCoordinator.Environment = .cloudKit
+    ) {
         self.store = store
         self.keychain = keychain
         self.biometricFactor = BiometricFactor(service: keychain.service)
-        self.sync = SyncCoordinator(store: store)
+        self.sync = SyncCoordinator(store: store, environment: syncEnvironment)
+        self.cloudSharing = syncEnvironment.sharing as? CloudKitSharedGroupService
+        observeInvitations()
+    }
+
+    /// The CloudKit side of shared groups, for the invitation and member
+    /// sheets. Nil when the app runs against the in-process stand-in.
+    let cloudSharing: CloudKitSharedGroupService?
+    /// An invitation that could not be accepted, for an alert.
+    var shareAcceptanceError: String?
+
+    /// An invitation accepted while the vault is open syncs at once; a locked
+    /// vault picks the group up at its next unlock.
+    private func observeInvitations() {
+        NotificationCenter.default.addObserver(forName: CloudShareInbox.accepted, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let session = self.session else { return }
+                Task { await self.sync.syncIfEnabled(session: session) }
+            }
+        }
+        NotificationCenter.default.addObserver(forName: CloudShareInbox.failed, object: nil, queue: .main) { [weak self] note in
+            let message = note.userInfo?["message"] as? String ?? "The invitation could not be accepted."
+            MainActor.assumeIsolated {
+                self?.shareAcceptanceError = message
+            }
+        }
     }
 
     /// The model the app should use. `SAFEKEY_SCRATCH_STORE=1` (debug builds
@@ -36,10 +65,19 @@ final class AppModel {
     /// `--uitest` does on the iPhone.
     static func forCurrentLaunch() -> AppModel {
         #if DEBUG
-        guard ProcessInfo.processInfo.environment["SAFEKEY_SCRATCH_STORE"] == "1" else { return AppModel() }
+        let env = ProcessInfo.processInfo.environment
+        // The demo and `SAFEKEY_FAKE_CLOUD=1` run against an in-process
+        // iCloud: a shared group made in a demo must never reach the real
+        // container, and the UI tests have no Apple ID to reach it with.
+        let sync: SyncCoordinator.Environment = (DebugSupport.isDemo || env["SAFEKEY_FAKE_CLOUD"] == "1") ? .uiTestFake() : .cloudKit
+        guard env["SAFEKEY_SCRATCH_STORE"] == "1" else { return AppModel(syncEnvironment: sync) }
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SafeKeyScratch-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
-        return AppModel(store: VaultStore(directory: directory), keychain: KeychainService(service: "com.andri.safekey.scratch"))
+        return AppModel(
+            store: VaultStore(directory: directory),
+            keychain: KeychainService(service: "com.andri.safekey.scratch"),
+            syncEnvironment: sync
+        )
         #else
         return AppModel()
         #endif

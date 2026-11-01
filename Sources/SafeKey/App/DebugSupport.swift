@@ -3,6 +3,7 @@ import AppKit
 import SwiftUI
 import LocalAuthentication
 import Security
+import CloudKit
 import SafeKeyCore
 
 /// DEBUG-only hooks for development and UI verification. Compiled out of
@@ -34,6 +35,66 @@ enum DebugSupport {
     }
 
     static let demoPassword = "demo-password-123"
+
+    /// `SAFEKEY_SHARED_PROBE=1` exercises shared groups against the real
+    /// CloudKit container — zone, encrypted key, share, a wallet through the
+    /// zone and back, removal — prints what happened, and exits. The one way
+    /// to check the CloudKit side with a single Apple ID, which cannot accept
+    /// its own invitation.
+    @MainActor
+    static func runSharedGroupProbeIfNeeded() -> Bool {
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["SAFEKEY_SHARED_PROBE"] == "1" else { return false }
+        Task {
+            var out = "[share] ==== shared group probe ====\n"
+            let service = CloudKitSharedGroupService()
+            let membership = SharedGroupMembership(key: SharedGroupMembership.newKey(), isOwner: true)
+            do {
+                let available = await CloudKitSyncBackend.isAvailable()
+                out += "[share] iCloud available = \(available)\n"
+                try await service.create(membership, name: "Probe group")
+                out += "[share] created zone \(CloudKitSharedGroupService.zoneName(for: membership.id))\n"
+
+                let found = try await service.discover()
+                let mine = found.first { $0.id == membership.id }
+                out += "[share] discovered \(found.count) group(s); probe found = \(mine != nil); key round-trips = \(mine?.key == membership.key); isOwner = \(mine?.isOwner ?? false)\n"
+
+                let share = try await service.share(for: membership, name: "Probe group")
+                out += "[share] share: url = \(share.url?.absoluteString ?? "nil"), participants = \(share.participants.count), public = \(share.publicPermission.rawValue), title = \(share[CKShare.SystemFieldKey.title] as? String ?? "-")\n"
+
+                // A wallet through the zone, as the first device.
+                let engine = VaultSync(backend: service.makeBackend(for: membership), dek: membership.symmetricKey)
+                var payload = VaultPayload(
+                    entries: [WalletEntry(name: "Probe wallet", chain: .evm, kind: .privateKey, secret: "0xprobe", groupID: membership.id)],
+                    groups: [WalletGroup(id: membership.id, name: "Probe group", chain: .evm)]
+                )
+                var state = VaultSync.State()
+                let pushed = try await engine.run(payload: &payload, state: &state)
+                out += "[share] first device pushed \(pushed.pushed) record(s)\n"
+
+                // And back down, as a second device that has only the key.
+                var fresh = VaultPayload(groups: [SharedGroupPartition.placeholder(membership.id)])
+                var freshState = VaultSync.State()
+                let second = VaultSync(backend: service.makeBackend(for: membership), dek: membership.symmetricKey)
+                let pulled = try await second.run(payload: &fresh, state: &freshState)
+                out += "[share] second device pulled \(pulled.pulled): wallets = \(fresh.entries.map(\.name)), secret ok = \(fresh.entries.first?.secret == "0xprobe"), group = \(fresh.groups.first?.name ?? "-")\n"
+
+                try await service.remove(membership)
+                let after = try await service.discover()
+                out += "[share] removed; still discovered = \(after.contains { $0.id == membership.id })\n"
+                out += "[share] OK\n"
+            } catch {
+                out += "[share] FAILED: \(error)\n"
+                try? await service.remove(membership)
+            }
+            FileHandle.standardError.write(Data(out.utf8))
+            exit(0)
+        }
+        return true
+        #else
+        return false
+        #endif
+    }
 
     /// `SAFEKEY_REBRAND_PRESET=<id>` (optionally with `SAFEKEY_REBRAND_NAME`)
     /// runs the bundle rebrand at launch and exits — lets the rebrand path be

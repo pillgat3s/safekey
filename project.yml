@@ -76,6 +76,8 @@ targets:
         CFBundleName: SafeKey
         LSApplicationCategoryType: public.app-category.utilities
         NSFaceIDUsageDescription: "SafeKey uses Touch ID to unlock your vault."
+        # Lets the app receive shared-group invitations.
+        CKSharingSupported: true
         NSSupportsSuddenTermination: false
         LSMinimumSystemVersion: "26.0"
         NSHumanReadableCopyright: ""
@@ -112,6 +114,8 @@ targets:
         CFBundleDisplayName: SafeKey
         UILaunchScreen: {}
         NSFaceIDUsageDescription: "SafeKey uses Face ID to unlock your vault."
+        # Lets the app receive shared-group invitations.
+        CKSharingSupported: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -220,6 +224,22 @@ schemes:
       targets:
         - SafeKeyCoreTests
         - SafeKeySharedTests
+
+  # The Mac UI tests drive real windows on the screen, so they are kept out
+  # of the main scheme's test action and run on their own:
+  #   xcodebuild -scheme SafeKeyMacUI -destination 'platform=macOS' test
+  SafeKeyMacUI:
+    build:
+      targets:
+        SafeKey: all
+        SafeKeyUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - SafeKeyUITests
 
   SafeKeyiOS:
     build:

@@ -19,6 +19,7 @@ actor Gate {
         for waiter in waiters { waiter.resume() }
         waiters = []
     }
+
 }
 
 /// Counts how many runs are inside the backend at once.
@@ -70,6 +71,7 @@ final class SyncCoordinatorTests: XCTestCase {
     override func setUp() async throws {
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SafeKeySyncTests-\(UUID().uuidString)", isDirectory: true)
+        UserDefaults.standard.removeObject(forKey: SyncCoordinator.discoveryPendingKey)
     }
 
     override func tearDown() async throws {
@@ -120,6 +122,7 @@ final class SyncCoordinatorTests: XCTestCase {
                 guard gated else { return direct }
                 return GatedBackend(inner: direct, release: release, entered: entered, probe: probe)
             },
+            sharing: FakeSharedGroupService(cloud: FakeCloud(), account: "solo"),
             editDebounce: .milliseconds(20)
         )
         let store = VaultStore(directory: directory)

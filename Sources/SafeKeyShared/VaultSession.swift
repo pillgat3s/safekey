@@ -17,11 +17,12 @@ final class VaultSession {
     private let onPersist: (Data, Vault.Unlocked) -> Void
     /// Surfaced in an alert when a background save fails; nil otherwise.
     var saveError: String?
-    /// Told about every deletion, so sync can pass it on. Set by the app model,
-    /// which owns both halves. Reported from here rather than from each button
-    /// that deletes something: a screen that forgot to call it would leave the
-    /// wallet alive on the other device with nothing to show it had gone.
-    var onDelete: ((Deletion) -> Void)?
+    /// Told about every deletion and every move between zones, so sync can
+    /// pass it on. Set by the app model, which owns both halves. Reported from
+    /// here rather than from each button that deletes something: a screen that
+    /// forgot to call it would leave the wallet alive on the other device with
+    /// nothing to show it had gone.
+    var onEvent: ((Event) -> Void)?
     /// Told after every write, so sync can send the change on. Every mutation
     /// the app makes lands here, which is what stops a rename or a regrouping
     /// from sitting on one device until something else happens to sync.
@@ -31,9 +32,20 @@ final class VaultSession {
     /// (biometric unlock) can be made once rather than on every unlock.
     var isNewlyCreated = false
 
-    enum Deletion: Sendable {
-        case wallet(UUID)
-        case group(UUID)
+    /// What sync has to be told about beyond "something changed". Each one
+    /// names the iCloud zone that owes a deletion: a wallet lives in its
+    /// shared group's zone or, outside any, in the vault's own.
+    enum Event: Sendable {
+        /// A wallet is gone; `groupID` is the group it was in.
+        case walletDeleted(UUID, groupID: UUID?)
+        /// A private group is gone. Its wallets stay, ungrouped.
+        case groupDeleted(UUID)
+        /// A wallet changed zone — into a shared group, out of one, or from
+        /// one to another. A deletion where it was, an addition where it is.
+        case walletMoved(UUID, from: UUID?, to: UUID?)
+        /// A shared group left this vault: the owner deleted it, or this
+        /// account left it. iCloud still has to be told.
+        case sharedGroupRemoved(SharedGroupMembership)
     }
 
     init(
@@ -74,8 +86,14 @@ final class VaultSession {
 
     // MARK: - Groups
 
+    /// The vault's own groups — the private folders, one chain each. Shared
+    /// groups are listed separately: they belong to several people and span
+    /// chains, so they are organised differently everywhere they appear.
     var groups: [WalletGroup] {
-        unlocked.payload.groups.sorted { $0.sortIndex < $1.sortIndex }
+        let shared = SharedGroupPartition.sharedGroupIDs(in: unlocked.payload)
+        return unlocked.payload.groups
+            .filter { !shared.contains($0.id) }
+            .sorted { $0.sortIndex < $1.sortIndex }
     }
 
     /// Groups belonging to one chain — the only grouping that makes sense.
@@ -83,6 +101,97 @@ final class VaultSession {
         groups.filter { $0.chain == chain }
     }
 
+    // MARK: - Shared groups
+
+    /// This device's standing in every shared group it belongs to.
+    var memberships: [SharedGroupMembership] { unlocked.payload.sharedGroups }
+
+    func membership(for groupID: UUID?) -> SharedGroupMembership? {
+        guard let groupID else { return nil }
+        return unlocked.payload.sharedGroups.first { $0.id == groupID }
+    }
+
+    func isShared(_ groupID: UUID?) -> Bool {
+        membership(for: groupID) != nil
+    }
+
+    /// The shared groups, by name — they have no chain to be ordered within.
+    var sharedGroups: [WalletGroup] {
+        let shared = SharedGroupPartition.sharedGroupIDs(in: unlocked.payload)
+        return unlocked.payload.groups
+            .filter { shared.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Wallets outside every shared group: what the home screen calls "My
+    /// Wallets" once there is a shared group to tell them apart from.
+    var ownEntries: [WalletEntry] {
+        entries.filter { !SharedGroupPartition.isShared($0, in: unlocked.payload) }
+    }
+
+    /// Records a shared group this account owns, once its zone exists in
+    /// iCloud. The coordinator calls this after creating the zone, so a group
+    /// never appears in the vault without somewhere for its wallets to go.
+    @discardableResult
+    func addSharedGroup(_ membership: SharedGroupMembership, name: String) -> WalletGroup {
+        let group = WalletGroup(
+            id: membership.id,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            chain: settings.defaultChain
+        )
+        unlocked.payload.sharedGroups.removeAll { $0.id == membership.id }
+        unlocked.payload.sharedGroups.append(membership)
+        unlocked.payload.groups.removeAll { $0.id == membership.id }
+        unlocked.payload.groups.append(group)
+        persist()
+        return group
+    }
+
+    /// Deletes a shared group this account owns. Its wallets come back to the
+    /// vault's own part — they were the owner's before the group existed —
+    /// and every member loses them.
+    func deleteSharedGroup(id: UUID) {
+        guard let membership = membership(for: id), membership.isOwner else { return }
+        SharedGroupPartition.removeSharedGroup(id: id, from: &unlocked.payload, keepingWallets: true)
+        persist()
+        onEvent?(.sharedGroupRemoved(membership))
+    }
+
+    /// Leaves a shared group someone else owns. Its wallets go with it: they
+    /// were shared with this account, not given to it.
+    func leaveSharedGroup(id: UUID) {
+        guard let membership = membership(for: id), !membership.isOwner else { return }
+        SharedGroupPartition.removeSharedGroup(id: id, from: &unlocked.payload, keepingWallets: false)
+        persist()
+        onEvent?(.sharedGroupRemoved(membership))
+    }
+
+    /// Applies what a look at the account found: groups this device did not
+    /// know it belonged to, and groups it no longer does.
+    ///
+    /// A group that is gone from the account was deleted by its owner or had
+    /// this account removed from it. The owner's own devices keep the wallets
+    /// — the owner moved them out of the group, not out of the vault — and a
+    /// member's do not.
+    func applyDiscovery(added: [SharedGroupMembership], removed: [UUID]) {
+        guard !added.isEmpty || !removed.isEmpty else { return }
+        for membership in added where self.membership(for: membership.id) == nil {
+            unlocked.payload.sharedGroups.append(membership)
+        }
+        for id in removed {
+            let wasOwner = membership(for: id)?.isOwner ?? false
+            SharedGroupPartition.removeSharedGroup(id: id, from: &unlocked.payload, keepingWallets: wasOwner)
+        }
+        persist()
+    }
+
+    /// Which zone a wallet in this group lives in: the group's own, or the
+    /// vault's.
+    private func zone(of groupID: UUID?) -> UUID? {
+        isShared(groupID) ? groupID : nil
+    }
+
+    /// Any group, private or shared.
     func group(id: UUID?) -> WalletGroup? {
         guard let id else { return nil }
         return unlocked.payload.groups.first { $0.id == id }
@@ -120,19 +229,38 @@ final class VaultSession {
     /// alongside a group — losing wallets because a folder was tidied away
     /// would be unforgivable in a vault.
     func deleteGroup(id: UUID) {
+        guard !isShared(id) else {
+            // A shared group is deleted or left, never tidied away.
+            if membership(for: id)?.isOwner == true { deleteSharedGroup(id: id) } else { leaveSharedGroup(id: id) }
+            return
+        }
         unlocked.payload.groups.removeAll { $0.id == id }
         for index in unlocked.payload.entries.indices where unlocked.payload.entries[index].groupID == id {
             unlocked.payload.entries[index].groupID = nil
         }
         persist()
-        onDelete?(.group(id))
+        onEvent?(.groupDeleted(id))
     }
 
+    /// Moves a wallet into a group, or out to none.
+    ///
+    /// Into or out of a shared group it is also a move between iCloud zones,
+    /// which sync is told about: the wallet has to be deleted where it was as
+    /// well as added where it is, or it would stay in both.
     func move(entryID: WalletEntry.ID, toGroup groupID: UUID?) {
         guard let index = unlocked.payload.entries.firstIndex(where: { $0.id == entryID }) else { return }
+        let from = zone(of: unlocked.payload.entries[index].groupID)
+        let to = zone(of: groupID)
         unlocked.payload.entries[index].groupID = groupID
         unlocked.payload.entries[index].modifiedAt = .vaultNow()
         persist()
+        if from != to { onEvent?(.walletMoved(entryID, from: from, to: to)) }
+    }
+
+    /// Moves several wallets into a shared group at once — the step after
+    /// creating one.
+    func move(entryIDs: [WalletEntry.ID], toGroup groupID: UUID?) {
+        for id in entryIDs { move(entryID: id, toGroup: groupID) }
     }
 
     var usedChains: [Chain] {
@@ -157,9 +285,10 @@ final class VaultSession {
     }
 
     func delete(id: WalletEntry.ID) {
+        let groupID = entry(id: id)?.groupID
         unlocked.payload.entries.removeAll { $0.id == id }
         persist()
-        onDelete?(.wallet(id))
+        onEvent?(.walletDeleted(id, groupID: zone(of: groupID)))
     }
 
     func toggleFavorite(id: WalletEntry.ID) {
